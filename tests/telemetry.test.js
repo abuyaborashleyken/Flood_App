@@ -27,6 +27,7 @@ const validPayload = {
   distanceChangeAlertCount: 4,
   clients: 1,
   uptime: 1200,
+  commandAck: "",
 };
 
 test("accepts a correctly authenticated device", () => {
@@ -52,4 +53,10 @@ test("rejects malformed or out-of-range telemetry", () => {
   assert.equal(normalizeTelemetry({ ...validPayload, distanceCm: 401 }, "now"), null);
   assert.equal(normalizeTelemetry({ ...validPayload, ultrasonicOk: 1 }, "now"), null);
   assert.equal(normalizeTelemetry({ ...validPayload, status: "unknown" }, "now"), null);
+  assert.equal(normalizeTelemetry({ ...validPayload, commandAck: "not-an-id" }, "now"), null);
+});
+
+test("accepts a valid remote-control acknowledgement", () => {
+  const commandAck = "123e4567-e89b-42d3-a456-426614174000";
+  assert.equal(normalizeTelemetry({ ...validPayload, commandAck }, "now").commandAck, commandAck);
 });

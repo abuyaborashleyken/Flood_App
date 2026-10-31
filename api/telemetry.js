@@ -1,4 +1,4 @@
-import { put } from "@vercel/blob";
+import { del, get, put } from "@vercel/blob";
 import {
   isAuthorizedAuthorizationHeader,
   normalizeTelemetry,
@@ -35,9 +35,39 @@ export default async function handler(req, res) {
       contentType: "application/json",
       cacheControlMaxAge: 0,
     });
-    return res.status(200).json({ ok: true });
+
+    const command = await get("control/pending.json", {
+      access: "private",
+      useCache: false,
+    });
+    if (!command) return res.status(200).json({ ok: true });
+
+    const pending = JSON.parse(await new Response(command.stream).text());
+    if (
+      typeof pending.id !== "string" ||
+      typeof pending.action !== "string" ||
+      !["on", "off"].includes(pending.action) ||
+      !Number.isSafeInteger(pending.expiresAt)
+    ) {
+      console.error("Discarding malformed AquaGuard remote control command.");
+      await del(command.blob.url, { ifMatch: command.blob.etag });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (telemetry.commandAck === pending.id || pending.expiresAt <= Date.now()) {
+      await del(command.blob.url, { ifMatch: command.blob.etag });
+      return res.status(200).json({ ok: true });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      command: { id: pending.id, action: pending.action },
+    });
   } catch (error) {
-    console.error("Could not save AquaGuard telemetry.", error);
-    return res.status(503).json({ ok: false, error: "Could not save telemetry." });
+    console.error("Could not save AquaGuard telemetry or read a pending command.", error);
+    return res.status(503).json({
+      ok: false,
+      error: "Could not save telemetry or read a pending command.",
+    });
   }
 }

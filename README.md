@@ -17,15 +17,21 @@ https://aquaguard-flood-dashboard.vercel.app
 The ESP32 continues to broadcast its local `S.E.C.U.R.E` network while joining
 the router network. The Vercel dashboard uses the same design as the local
 device dashboard. Cloud readings are sent every second and the dashboard
-refreshes every second. The cloud dashboard is read-only; controls on the
-local dashboard continue to work only on the ESP32 network. Wi-Fi and cloud
-latency mean readings are near-real-time, not instantaneous.
+refreshes every second. The dashboard can remotely switch the low-voltage
+GPIO23 indicator when the ESP32 is online. Remote commands are password
+protected and expire if the device does not receive them within 30 seconds.
+The control password must be configured as the Vercel environment variable
+`AQUAGUARD_CONTROL_PASSWORD` and must be at least 16 characters. The browser
+session expires after eight hours. The cloud dashboard cannot switch a pump,
+mains circuit, or other power supply. Wi-Fi and cloud latency mean readings
+are near-real-time, not instantaneous.
 
 ## Vercel project
 
 The Vercel project is `aquaguard-flood-dashboard`. Its private Blob store
-contains only the latest sensor reading. The device token and Blob credentials
-are managed as Vercel environment variables, not in this repository.
+contains the latest sensor reading and a short-lived pending indicator
+command. The device token, control password, and Blob credentials are managed
+as Vercel environment variables, not in this repository.
 
 For code changes, run `npm install` and `npm test`, then push to `main`.
 The Vercel project is connected to this GitHub repository and deploys changes

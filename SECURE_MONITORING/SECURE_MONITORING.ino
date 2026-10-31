@@ -750,7 +750,7 @@ void sendJson(int code, const String &json) {
 
 String buildStatusJson() {
   String json;
-  json.reserve(550);
+  json.reserve(600);
   json += "{\"ok\":true";
   json += ",\"status\":\"" + status + "\"";
   json += ",\"ledOn\":" + String(loadLedOn ? "true" : "false");
@@ -774,6 +774,7 @@ String buildStatusJson() {
   json += ",\"distanceChangeAlertCount\":" + String(distanceChangeAlertCount);
   json += ",\"clients\":" + String(WiFi.softAPgetStationNum());
   json += ",\"uptime\":" + String(millis() / 1000UL);
+  json += ",\"commandAck\":\"" + prefs.getString("commandAck", "") + "\"";
   json += "}";
   return json;
 }
@@ -782,6 +783,33 @@ void sendStatus() {
   // All fields are generated from ESP32 measurements, not random UI data.
   String json = buildStatusJson();
   sendJson(200, json);
+}
+
+String cloudJsonStringField(const String &json, const char *field, int startAt = 0) {
+  const String marker = String("\"") + field + "\":\"";
+  const int valueStart = json.indexOf(marker, startAt);
+  if (valueStart < 0) return "";
+  const int contentStart = valueStart + marker.length();
+  const int valueEnd = json.indexOf('"', contentStart);
+  if (valueEnd < 0) return "";
+  return json.substring(contentStart, valueEnd);
+}
+
+void applyCloudControlCommand(const String &responseBody) {
+  const int commandStart = responseBody.indexOf("\"command\":{");
+  if (commandStart < 0) return;
+
+  const String commandId = cloudJsonStringField(responseBody, "id", commandStart);
+  const String action = cloudJsonStringField(responseBody, "action", commandStart);
+  if (commandId.length() != 36 || (action != "on" && action != "off")) return;
+  if (prefs.getString("commandAck", "") == commandId) return;
+
+  const bool turnOn = action == "on";
+  loadLedAutoOffLatched = !turnOn;
+  setLoadLed(turnOn);
+  prefs.putString("commandAck", commandId);
+  Serial.printf("Cloud control command %s acknowledged: GPIO23 %s\n",
+                commandId.c_str(), turnOn ? "ON" : "OFF");
 }
 
 void sendCloudTelemetry() {
@@ -848,7 +876,8 @@ bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
   if (responseCode < 200 || responseCode >= 300) {
     Serial.printf("ERROR: Cloud telemetry request returned HTTP %d\n", responseCode);
   } else {
-    Serial.println("Cloud telemetry delivered successfully");
+    const String responseBody = http.getString();
+    applyCloudControlCommand(responseBody);
   }
   http.end();
 }
@@ -865,7 +894,7 @@ void postLoadLed() {
     return;
   }
   const bool turnOn = action == "on";
-  if (turnOn) loadLedAutoOffLatched = false;
+  loadLedAutoOffLatched = !turnOn;
   setLoadLed(turnOn);
   sendJson(200, String("{\"ok\":true,\"ledOn\":") + (loadLedOn ? "true" : "false") + "}");
 }
