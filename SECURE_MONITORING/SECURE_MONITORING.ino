@@ -790,7 +790,13 @@ void sendCloudTelemetry() {
   const uint32_t now = millis();
   if (now - lastCloudTelemetryMs < CLOUD_TELEMETRY_INTERVAL_MS) return;
   lastCloudTelemetryMs = now;
-  if (WiFi.status() != WL_CONNECTED) return;
+  const wl_status_t wifiStatus = WiFi.status();
+  if (wifiStatus != WL_CONNECTED) {
+    Serial.printf("Cloud telemetry skipped: router Wi-Fi status %d\n", static_cast<int>(wifiStatus));
+    return;
+  }
+  Serial.printf("Cloud telemetry Wi-Fi connected: IP %s, signal %d dBm\n",
+                WiFi.localIP().toString().c_str(), WiFi.RSSI());
 
   static const char VERCEL_ROOT_CA[] PROGMEM = R"PEM(
 -----BEGIN CERTIFICATE-----
@@ -824,7 +830,7 @@ Z6tGn6D/Qqc6f1zLXbBwHSs09dR2CQzreExZBfMzQsNhFRAbd03OIozUhfJFfbdT
 2tIMPNuzjsmhDYAPexZ3FL//2wmUspO8IFgV6dtxQ/PeEMMA3KgqlbbC1j+Qa3bb
 bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
 -----END CERTIFICATE-----
-)";
+)PEM";
 
   WiFiClientSecure tlsClient;
   tlsClient.setCACert(VERCEL_ROOT_CA);
@@ -841,6 +847,8 @@ bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
   const int responseCode = http.POST(buildStatusJson());
   if (responseCode < 200 || responseCode >= 300) {
     Serial.printf("ERROR: Cloud telemetry request returned HTTP %d\n", responseCode);
+  } else {
+    Serial.println("Cloud telemetry delivered successfully");
   }
   http.end();
 }
@@ -940,6 +948,12 @@ void setup() {
   WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
   if (!WiFi.softAP(AP_SSID, AP_PASSWORD)) Serial.println("ERROR: Cannot create AquaGuard Wi-Fi network");
   if (strlen(AQUAGUARD_WIFI_SSID) > 0) {
+    WiFi.onEvent([](arduino_event_id_t event, arduino_event_info_t info) {
+      if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+        Serial.printf("Router Wi-Fi disconnected; reason %u\n",
+                      static_cast<unsigned>(info.wifi_sta_disconnected.reason));
+      }
+    });
     WiFi.begin(AQUAGUARD_WIFI_SSID, AQUAGUARD_WIFI_PASSWORD);
     WiFi.setAutoReconnect(true);
     Serial.printf("Connecting cloud telemetry to router Wi-Fi: %s\n", AQUAGUARD_WIFI_SSID);
