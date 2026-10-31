@@ -3,7 +3,7 @@
 The ESP32 keeps its local dashboard at `http://192.168.4.1` and can also send
 sensor readings to the live S.E.C.U.R.E-App dashboard:
 
-https://aquaguard-flood-dashboard.vercel.app
+https://secure-app-live.vercel.app
 
 ## Connect the ESP32 to the internet
 
@@ -30,11 +30,14 @@ are near-real-time, not instantaneous.
 
 ## S.E.C.U.R.E-App deployment
 
-The Vercel project is `secure-app`. Its current production URL retains the
-existing `aquaguard-flood-dashboard.vercel.app` alias so the ESP32 continues
-to send readings without a firmware update. The dashboard uses the supplied
-S.E.C.U.R.E logo as its app mark, favicon, and install icon. Its rounded
-layout adapts to mobile, tablet, and desktop displays. Its private Blob store
+The Vercel project is `secure-app`, published at
+https://secure-app-live.vercel.app. The previous
+`aquaguard-flood-dashboard.vercel.app` address remains as a compatibility
+alias for already-flashed ESP32 firmware; the checked-in sketch now targets
+the new address. Upload the sketch to the ESP32 to switch its telemetry
+endpoint. The dashboard uses the supplied S.E.C.U.R.E logo as its app mark,
+favicon, and install icon. Its rounded layout adapts to mobile, tablet, and
+desktop displays. Its private Blob store
 contains the latest sensor reading and a short-lived pending indicator
 command. The device token, control password, and Blob credentials are managed
 as Vercel environment variables, not in this repository.

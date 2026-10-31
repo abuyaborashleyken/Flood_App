@@ -2,4 +2,4 @@
 #define AQUAGUARD_WIFI_SSID "your-router-wifi-name"
 #define AQUAGUARD_WIFI_PASSWORD "your-router-wifi-password"
 #define AQUAGUARD_DEVICE_TOKEN "replace-with-the-generated-device-token"
-#define AQUAGUARD_TELEMETRY_URL "https://aquaguard-flood-dashboard.vercel.app/api/telemetry"
+#define AQUAGUARD_TELEMETRY_URL "https://secure-app-live.vercel.app/api/telemetry"

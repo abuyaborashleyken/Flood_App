@@ -30,7 +30,7 @@
 #define AQUAGUARD_DEVICE_TOKEN "configure-a-private-device-token"
 #endif
 #ifndef AQUAGUARD_TELEMETRY_URL
-#define AQUAGUARD_TELEMETRY_URL "https://aquaguard-flood-dashboard.vercel.app/api/telemetry"
+#define AQUAGUARD_TELEMETRY_URL "https://secure-app-live.vercel.app/api/telemetry"
 #endif
 
 constexpr uint8_t RED_LED_PIN = 2;
