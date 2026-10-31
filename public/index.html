@@ -202,7 +202,7 @@ document.querySelectorAll('.side-link').forEach(button=>button.addEventListener(
 }));
 let samples=[],formLoaded=false,polling=false,previewTick=0,previewLedOn=false,lastStatus=null,lastLedState=null,toastTimer=0,toastHideTimer=0,notificationsReceived=0,lastNotification=null,notificationHistory=[];
 if(preview){el('previewBanner').style.display='block';el('powerSourceToggle').disabled=true;el('powerOffButton').disabled=true;el('powerOnButton').disabled=true;el('saveBtn').disabled=true;el('testBuzzerBtn').disabled=true;el('applyBuzzerModeBtn').disabled=true;el('saveMessage').textContent='Connect to the device to save this setting.';el('buzzerTestMessage').textContent='Connect to the device to test the alarm.';}
-if(cloudDashboard){['powerSourceToggle','powerOffButton','powerOnButton','saveBtn','changeCm','testBuzzerBtn','applyBuzzerModeBtn','driverMode'].forEach(id=>el(id).disabled=true);el('appShell').querySelector('.sidebar-note').textContent='Cloud dashboard is read-only. Connect to the S.E.C.U.R.E Wi-Fi for device controls.';document.querySelector('.stats-title span').textContent='Live readings refresh every 5 seconds';el('powerToggleMessage').textContent='Device controls are available on the local S.E.C.U.R.E Wi-Fi dashboard.';el('saveMessage').textContent='Settings can only be changed on the local device dashboard.';el('buzzerTestMessage').textContent='The alarm can only be tested on the local device dashboard.';}
+if(cloudDashboard){['powerSourceToggle','powerOffButton','powerOnButton','saveBtn','changeCm','testBuzzerBtn','applyBuzzerModeBtn','driverMode'].forEach(id=>el(id).disabled=true);el('appShell').querySelector('.sidebar-note').textContent='Cloud dashboard is read-only. Connect to the S.E.C.U.R.E Wi-Fi for device controls.';document.querySelector('.stats-title span').textContent='Live readings refresh every second';el('powerToggleMessage').textContent='Device controls are available on the local S.E.C.U.R.E Wi-Fi dashboard.';el('saveMessage').textContent='Settings can only be changed on the local device dashboard.';el('buzzerTestMessage').textContent='The alarm can only be tested on the local device dashboard.';}
 function setLED(id,on){el(id).classList.toggle('on',!!on)}
 function playAlertSound(status){
  if(!alertSoundEnabled||!alertAudioContext||alertAudioContext.state!=='running')return false;
@@ -436,6 +436,6 @@ el('testBuzzerBtn').addEventListener('click',async()=>{
   }catch(e){message.className='message error';message.textContent='Could not test the alarm. Check the connections and try again.';}
   finally{button.disabled=false;}
 });
-window.addEventListener('resize',draw);load();setInterval(load,cloudDashboard?5000:1000);
+window.addEventListener('resize',draw);load();setInterval(load,1000);
 </script>
 </body></html>
