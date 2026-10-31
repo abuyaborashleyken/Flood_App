@@ -1,4 +1,5 @@
 /SECURE_MONITORING/secrets.h
+/arduino-build/
 /node_modules/
 /.vercel/
 /.env*
