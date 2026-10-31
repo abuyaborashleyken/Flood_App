@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#10213b" />
+    <title>AquaGuard | Water Level</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+        color: #18243b;
+        background: #f3f6fa;
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+      }
+
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; }
+      header { padding: 18px 24px; color: #fff; background: #10213b; }
+      .header-inner, main { width: min(100% - 32px, 1040px); margin: 0 auto; }
+      .header-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      .brand { display: flex; align-items: center; gap: 12px; }
+      .logo { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; background: #2867ee; font-size: 24px; }
+      h1, h2, p { margin: 0; }
+      h1 { font-size: 20px; }
+      .subtitle { margin-top: 3px; color: #9db6dc; font-size: 12px; }
+      .connection { display: flex; align-items: center; gap: 8px; color: #c8d6e9; font-size: 13px; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: #dca54f; }
+      .dot.online { background: #4cddaf; }
+      main { padding: 36px 0; }
+      .intro { margin-bottom: 22px; }
+      .eyebrow { color: #617ea7; font-size: 11px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; }
+      h2 { margin-top: 7px; font-size: clamp(25px, 5vw, 34px); letter-spacing: -0.8px; }
+      .description { margin-top: 7px; color: #728197; line-height: 1.5; }
+      .status { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 16px; padding: 21px 24px; border: 1px solid #e7edf4; border-radius: 18px; background: #fff; }
+      .status-label { color: #728197; font-size: 12px; font-weight: 700; }
+      .status-value { margin-top: 5px; font-size: 24px; font-weight: 800; text-transform: capitalize; }
+      .status-value.safe { color: #12986d; }
+      .status-value.warning { color: #b77a0e; }
+      .status-value.critical, .status-value.fault { color: #cf4654; }
+      .status-caption { margin-top: 5px; color: #728197; font-size: 13px; }
+      .status-icon { font-size: 32px; }
+      .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+      .card { min-height: 132px; padding: 20px; border: 1px solid #e7edf4; border-radius: 16px; background: #fff; }
+      .card-label { color: #728197; font-size: 12px; font-weight: 700; }
+      .metric { margin-top: 13px; font-size: 30px; font-weight: 800; letter-spacing: -0.7px; }
+      .unit { margin-left: 6px; color: #728197; font-size: 13px; font-weight: 500; letter-spacing: 0; }
+      .indicators { display: flex; gap: 14px; margin-top: 19px; }
+      .indicator { display: flex; align-items: center; gap: 7px; color: #526179; font-size: 12px; }
+      .lamp { width: 12px; height: 12px; border-radius: 50%; background: #dfe5ec; }
+      .lamp.on.safe { background: #20ab79; box-shadow: 0 0 0 3px #20ab7920; }
+      .lamp.on.warning { background: #e2a233; box-shadow: 0 0 0 3px #e2a23320; }
+      .lamp.on.critical { background: #dc5361; box-shadow: 0 0 0 3px #dc536120; }
+      .notice { margin-top: 16px; padding: 14px 16px; border: 1px solid #e7edf4; border-radius: 12px; background: #fff; color: #617087; font-size: 13px; line-height: 1.5; }
+      .notice.error { border-color: #f2c5ca; background: #fff6f6; color: #a43845; }
+      .updated { margin-top: 18px; color: #8290a4; font-size: 12px; text-align: right; }
+      footer { padding: 0 16px 25px; color: #8290a4; font-size: 12px; text-align: center; }
+      @media (max-width: 640px) {
+        header { padding: 15px 0; }
+        .header-inner, main { width: min(100% - 24px, 1040px); }
+        main { padding-top: 26px; }
+        .grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+        .card { min-height: 120px; padding: 16px; }
+        .status { padding: 18px; }
+        .metric { font-size: 26px; }
+        .indicators { flex-wrap: wrap; gap: 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <div class="logo" aria-hidden="true">≋</div>
+          <div><h1>AquaGuard</h1><p class="subtitle">Live water-level monitoring</p></div>
+        </div>
+        <div class="connection"><span class="dot" id="connectionDot"></span><span id="connectionText">Connecting</span></div>
+      </div>
+    </header>
+    <main>
+      <section class="intro">
+        <p class="eyebrow">Water level</p>
+        <h2>Water right now</h2>
+        <p class="description">A smaller distance means the water is closer to the sensor.</p>
+      </section>
+      <section class="status" aria-live="polite">
+        <div>
+          <p class="status-label">CURRENT CONDITION</p>
+          <p class="status-value fault" id="status">Waiting for device</p>
+          <p class="status-caption" id="caption">Waiting for the first ESP32 reading.</p>
+        </div>
+        <div class="status-icon" aria-hidden="true" id="statusIcon">◌</div>
+      </section>
+      <section class="grid" aria-label="Latest sensor readings">
+        <article class="card"><p class="card-label">Distance to water</p><p class="metric" id="distance">—<span class="unit">cm</span></p></article>
+        <article class="card"><p class="card-label">Estimated water rise</p><p class="metric" id="height">—<span class="unit">cm</span></p></article>
+        <article class="card"><p class="card-label">Estimated tank level</p><p class="metric" id="level">—<span class="unit">%</span></p></article>
+        <article class="card"><p class="card-label">Sensor</p><p class="metric" id="sensor">Waiting</p></article>
+        <article class="card"><p class="card-label">Power Source indicator</p><p class="metric" id="power">—</p></article>
+        <article class="card"><p class="card-label">Alarm sound</p><p class="metric" id="buzzer">—</p></article>
+      </section>
+      <section class="card" style="margin-top:14px">
+        <p class="card-label">Water-level indicators</p>
+        <div class="indicators">
+          <span class="indicator"><i class="lamp" id="greenLamp"></i>Safe</span>
+          <span class="indicator"><i class="lamp" id="yellowLamp"></i>Warning</span>
+          <span class="indicator"><i class="lamp" id="redLamp"></i>Critical</span>
+        </div>
+      </section>
+      <p class="notice" id="notice">The ESP32 must be connected to the internet to send readings to this dashboard.</p>
+      <p class="updated" id="updated">No readings received</p>
+    </main>
+    <footer>Distance decreases as the water rises toward the sensor.</footer>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const statusText = {
+        safe: "Water is at a safe level.",
+        warning: "Water is rising. Check the area.",
+        critical: "Critical water level. Take action.",
+        fault: "The sensor cannot read the water level."
+      };
+
+      function showWaiting(message, error = false) {
+        $("status").textContent = "Waiting for device";
+        $("status").className = "status-value fault";
+        $("caption").textContent = message;
+        $("statusIcon").textContent = "◌";
+        $("notice").textContent = message;
+        $("notice").className = error ? "notice error" : "notice";
+        $("connectionDot").classList.remove("online");
+        $("connectionText").textContent = error ? "Service unavailable" : "Waiting for device";
+      }
+
+      function render(data) {
+        if (!data.available) {
+          showWaiting("Waiting for the first ESP32 reading.");
+          return;
+        }
+
+        const status = ["safe", "warning", "critical", "fault"].includes(data.status) ? data.status : "fault";
+        const fresh = Date.now() - Date.parse(data.receivedAt) < 90000;
+        $("connectionDot").classList.toggle("online", fresh);
+        $("connectionText").textContent = fresh ? "Device online" : "Device offline";
+        $("status").textContent = status;
+        $("status").className = "status-value " + status;
+        $("caption").textContent = statusText[status];
+        $("statusIcon").textContent = status === "safe" ? "✓" : status === "warning" ? "!" : status === "critical" ? "‼" : "—";
+        $("distance").innerHTML = data.ultrasonicOk ? Number(data.distanceCm).toFixed(1) + '<span class="unit">cm</span>' : '—<span class="unit">cm</span>';
+        $("height").innerHTML = data.ultrasonicOk ? Number(data.waterHeightCm).toFixed(1) + '<span class="unit">cm</span>' : '—<span class="unit">cm</span>';
+        $("level").innerHTML = data.ultrasonicOk ? Number(data.levelPercent).toFixed(0) + '<span class="unit">%</span>' : '—<span class="unit">%</span>';
+        $("sensor").textContent = data.ultrasonicOk ? "Working" : "No reading";
+        $("power").textContent = data.ledOn ? "On" : "Off";
+        $("buzzer").textContent = data.buzzer ? "On" : "Off";
+        $("greenLamp").className = "lamp" + (data.green ? " on safe" : "");
+        $("yellowLamp").className = "lamp" + (data.yellow ? " on warning" : "");
+        $("redLamp").className = "lamp" + (data.red ? " on critical" : "");
+        $("notice").textContent = fresh
+          ? "Latest ESP32 reading received."
+          : "The last reading is more than 90 seconds old. Check the device or its internet connection.";
+        $("notice").className = fresh ? "notice" : "notice error";
+        $("updated").textContent = "Last reading: " + new Date(data.receivedAt).toLocaleString();
+      }
+
+      async function refresh() {
+        try {
+          const response = await fetch("/api/status", { cache: "no-store" });
+          if (!response.ok) throw new Error("Status request failed");
+          const data = await response.json();
+          if (!data.ok) throw new Error("Invalid status response");
+          render(data);
+        } catch {
+          showWaiting("Could not connect to the monitoring service. Retrying shortly.", true);
+        }
+      }
+
+      refresh();
+      window.setInterval(refresh, 30000);
+    </script>
+  </body>
+</html>

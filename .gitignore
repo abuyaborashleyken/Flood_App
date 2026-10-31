@@ -1,1 +1,4 @@
 /SECURE_MONITORING/secrets.h
+/node_modules/
+/.vercel/
+/.env*

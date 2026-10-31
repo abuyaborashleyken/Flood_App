@@ -10,12 +10,27 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <Preferences.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <esp_arduino_version.h>
 
 #if __has_include("secrets.h")
 #include "secrets.h"
 #else
 #define AQUAGUARD_AP_PASSWORD "change-me-before-use"
+#endif
+
+#ifndef AQUAGUARD_WIFI_SSID
+#define AQUAGUARD_WIFI_SSID ""
+#endif
+#ifndef AQUAGUARD_WIFI_PASSWORD
+#define AQUAGUARD_WIFI_PASSWORD ""
+#endif
+#ifndef AQUAGUARD_DEVICE_TOKEN
+#define AQUAGUARD_DEVICE_TOKEN "configure-a-private-device-token"
+#endif
+#ifndef AQUAGUARD_TELEMETRY_URL
+#define AQUAGUARD_TELEMETRY_URL "https://aquaguard-flood-dashboard.vercel.app/api/telemetry"
 #endif
 
 constexpr uint8_t RED_LED_PIN = 2;
@@ -58,6 +73,7 @@ constexpr uint32_t WARNING_BUZZER_OFF_MS = 500;
 constexpr uint32_t CRITICAL_BUZZER_ON_MS = 300;
 constexpr uint32_t CRITICAL_BUZZER_OFF_MS = 300;
 constexpr uint32_t BUZZER_POWER_OFF_DELAY_MS = 5000;
+constexpr uint32_t CLOUD_TELEMETRY_INTERVAL_MS = 30000;
 
 constexpr uint32_t SAMPLE_INTERVAL_MS = 420;
 constexpr uint32_t ECHO_TIMEOUT_US = 27000;
@@ -86,6 +102,7 @@ bool loadLedAutoOffLatched = false;
 bool loadLedOffTimerActive = true;
 uint32_t loadLedOffSinceMs = 0;
 uint32_t lastSampleMs = 0;
+uint32_t lastCloudTelemetryMs = 0;
 float lastChangeReferenceCm = -1.0f;
 uint32_t lastChangeAlertMs = 0;
 uint32_t distanceChangeAlertCount = 0;
@@ -731,8 +748,7 @@ void sendJson(int code, const String &json) {
   server.send(code, "application/json; charset=utf-8", json);
 }
 
-void sendStatus() {
-  // All fields are generated from ESP32 measurements, not random UI data.
+String buildStatusJson() {
   String json;
   json.reserve(550);
   json += "{\"ok\":true";
@@ -759,7 +775,74 @@ void sendStatus() {
   json += ",\"clients\":" + String(WiFi.softAPgetStationNum());
   json += ",\"uptime\":" + String(millis() / 1000UL);
   json += "}";
+  return json;
+}
+
+void sendStatus() {
+  // All fields are generated from ESP32 measurements, not random UI data.
+  String json = buildStatusJson();
   sendJson(200, json);
+}
+
+void sendCloudTelemetry() {
+  if (strlen(AQUAGUARD_WIFI_SSID) == 0 || strlen(AQUAGUARD_DEVICE_TOKEN) < 32) return;
+
+  const uint32_t now = millis();
+  if (now - lastCloudTelemetryMs < CLOUD_TELEMETRY_INTERVAL_MS) return;
+  lastCloudTelemetryMs = now;
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  static const char VERCEL_ROOT_CA[] PROGMEM = R"PEM(
+-----BEGIN CERTIFICATE-----
+MIIFVzCCAz+gAwIBAgINAgPlk28xsBNJiGuiFzANBgkqhkiG9w0BAQwFADBHMQsw
+CQYDVQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZpY2VzIExMQzEU
+MBIGA1UEAxMLR1RTIFJvb3QgUjEwHhcNMTYwNjIyMDAwMDAwWhcNMzYwNjIyMDAw
+MDAwWjBHMQswCQYDVQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZp
+Y2VzIExMQzEUMBIGA1UEAxMLR1RTIFJvb3QgUjEwggIiMA0GCSqGSIb3DQEBAQUA
+A4ICDwAwggIKAoICAQC2EQKLHuOhd5s73L+UPreVp0A8of2C+X0yBoJx9vaMf/vo
+27xqLpeXo4xL+Sv2sfnOhB2x+cWX3u+58qPpvBKJXqeqUqv4IyfLpLGcY9vXmX7w
+Cl7raKb0xlpHDU0QM+NOsROjyBhsS+z8CZDfnWQpJSMHobTSPS5g4M/SCYe7zUjw
+TcLCeoiKu7rPWRnWr4+wB7CeMfGCwcDfLqZtbBkOtdh+JhpFAz2weaSUKK0Pfybl
+qAj+lug8aJRT7oM6iCsVlgmy4HqMLnXWnOunVmSPlk9orj2XwoSPwLxAwAtcvfaH
+szVsrBhQf4TgTM2S0yDpM7xSma8ytSmzJSq0SPly4cpk9+aCEI3oncKKiPo4Zor8
+Y/kB+Xj9e1x3+naH+uzfsQ55lVe0vSbv1gHR6xYKu44LtcXFilWr06zqkUspzBmk
+MiVOKvFlRNACzqrOSbTqn3yDsEB750Orp2yjj32JgfpMpf/VjsPOS+C12LOORc92
+wO1AK/1TD7Cn1TsNsYqiA94xrcx36m97PtbfkSIS5r762DL8EGMUUXLeXdYWk70p
+aDPvOmbsB4om3xPXV2V4J95eSRQAogB/mqghtqmxlbCluQ0WEdrHbEg8QOB+DVrN
+VjzRlwW5y0vtOUucxD/SVRNuJLDWcfr0wbrM7Rv1/oFB2ACYPTrIrnqYNxgFlQID
+AQABo0IwQDAOBgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4E
+FgQU5K8rJnEaK0gnhS9SZizv8IkTcT4wDQYJKoZIhvcNAQEMBQADggIBAJ+qQibb
+C5u+/x6Wki4+omVKapi6Ist9wTrYggoGxval3sBOh2Z5ofmmWJyq+bXmYOfg6LEe
+QkEzCzc9zolwFcq1JKjPa7XSQCGYzyI0zzvFIoTgxQ6KfF2I5DUkzps+GlQebtuy
+h6f88/qBVRRiClmpIgUxPoLW7ttXNLwzldMXG+gnoot7TiYaelpkttGsN/H9oPM4
+7HLwEXWdyzRSjeZ2axfG34arJ45JK3VmgRAhpuo+9K4l/3wV3s6MJT/KYnAK9y8J
+ZgfIPxz88NtFMN9iiMG1D53Dn0reWVlHxYciNuaCp+0KueIHoI17eko8cdLiA6Ef
+MgfdG+RCzgwARWGAtQsgWSl4vflVy2PFPEz0tv/bal8xa5meLMFrUKTX5hgUvYU/
+Z6tGn6D/Qqc6f1zLXbBwHSs09dR2CQzreExZBfMzQsNhFRAbd03OIozUhfJFfbdT
+6u9AWpQKXCBfTkBdYiJ23//OYb2MI3jSNwLgjt7RETeJ9r/tSQdirpLsQBqvFAnZ
+0E6yove+7u7Y/9waLd64NnHi/Hm3lCXRSHNboTXns5lndcEZOitHTtNCjv0xyBZm
+2tIMPNuzjsmhDYAPexZ3FL//2wmUspO8IFgV6dtxQ/PeEMMA3KgqlbbC1j+Qa3bb
+bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
+-----END CERTIFICATE-----
+)";
+
+  WiFiClientSecure tlsClient;
+  tlsClient.setCACert(VERCEL_ROOT_CA);
+  HTTPClient http;
+  if (!http.begin(tlsClient, AQUAGUARD_TELEMETRY_URL)) {
+    Serial.println("ERROR: Could not start HTTPS telemetry request");
+    return;
+  }
+
+  http.setConnectTimeout(2500);
+  http.setTimeout(2500);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Authorization", String("Bearer ") + AQUAGUARD_DEVICE_TOKEN);
+  const int responseCode = http.POST(buildStatusJson());
+  if (responseCode < 200 || responseCode >= 300) {
+    Serial.printf("ERROR: Cloud telemetry request returned HTTP %d\n", responseCode);
+  }
+  http.end();
 }
 
 void postLoadLed() {
@@ -853,9 +936,16 @@ void setup() {
   sampleSensors();
   updateOutputs();
 
-  WiFi.mode(WIFI_AP);
+  WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
   if (!WiFi.softAP(AP_SSID, AP_PASSWORD)) Serial.println("ERROR: Cannot create AquaGuard Wi-Fi network");
+  if (strlen(AQUAGUARD_WIFI_SSID) > 0) {
+    WiFi.begin(AQUAGUARD_WIFI_SSID, AQUAGUARD_WIFI_PASSWORD);
+    WiFi.setAutoReconnect(true);
+    Serial.printf("Connecting cloud telemetry to router Wi-Fi: %s\n", AQUAGUARD_WIFI_SSID);
+  } else {
+    Serial.println("Cloud telemetry disabled: configure router Wi-Fi in secrets.h");
+  }
   dns.start(53, "*", WiFi.softAPIP());
   server.on("/", HTTP_GET, sendPage);
   server.on("/api/status", HTTP_GET, sendStatus);
@@ -873,7 +963,7 @@ void setup() {
   Serial.printf("Buzzer: GPIO21 | mode: %s | test: POST /api/buzzer/test\n",
                 buzzerMode == PASSIVE_PWM ? "PASSIVE PWM" : "ACTIVE HIGH");
   Serial.print("Wi-Fi: "); Serial.println(AP_SSID);
-  Serial.print("Password: "); Serial.println(AP_PASSWORD);
+  Serial.println("Password: configured in secrets.h");
   Serial.println("Open: http://192.168.4.1");
   Serial.printf("Log movement alert when filtered distance moves by >= %.1f cm\n", changeAlertCm);
   Serial.println("Distance rules: SAFE >= 11 cm; WARNING 7-<11 cm; CRITICAL <7 cm");
@@ -890,6 +980,7 @@ void loop() {
     sampleSensors();
   }
   updateOutputs();
+  sendCloudTelemetry();
 
   static uint32_t lastLogMs = 0;
   if (now - lastLogMs >= 3000UL) {
