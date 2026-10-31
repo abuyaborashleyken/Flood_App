@@ -39,6 +39,15 @@ contains the latest sensor reading and a short-lived pending indicator
 command. The device token, control password, and Blob credentials are managed
 as Vercel environment variables, not in this repository.
 
+## Install S.E.C.U.R.E-App
+
+Open the dashboard over HTTPS in a supported browser and choose **Install app**
+in the header. On iPhone or iPad, open the dashboard in Safari, tap **Share**,
+then choose **Add to Home Screen**. On Android, use the browser menu and select
+**Install app** or **Add to Home screen**. The app shell and branding assets are
+available offline after the first visit; live readings and remote controls
+still require an internet connection.
+
 For code changes, run `npm install` and `npm test`, then push to `main`.
 The Vercel project is connected to this GitHub repository and deploys changes
 from authorized commits automatically.
