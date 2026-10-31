@@ -29,5 +29,6 @@ The Vercel project is `aquaguard-flood-dashboard`. Its private Blob store
 contains only the latest sensor reading. The device token and Blob credentials
 are managed as Vercel environment variables, not in this repository.
 
-For code changes, run `npm install` and `npm test`, then deploy from the
-repository root with `vercel --prod`.
+For code changes, run `npm install` and `npm test`, then push to `main`.
+The Vercel project is connected to this GitHub repository and deploys changes
+from authorized commits automatically.
