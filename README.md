@@ -37,10 +37,26 @@ alias for already-flashed ESP32 firmware; the checked-in sketch now targets
 the new address. Upload the sketch to the ESP32 to switch its telemetry
 endpoint. The dashboard uses the supplied S.E.C.U.R.E logo as its app mark,
 favicon, and install icon. Its rounded layout adapts to mobile, tablet, and
-desktop displays. Its private Blob store
-contains the latest sensor reading and a short-lived pending indicator
-command. The device token, control password, and Blob credentials are managed
-as Vercel environment variables, not in this repository.
+desktop displays. A private Supabase database stores the latest sensor reading
+and short-lived indicator commands. The device token, control password, and
+Supabase service-role key are managed as Vercel environment variables, not in
+this repository.
+
+### Configure the Supabase telemetry backend
+
+1. Create a Supabase project and open its **SQL Editor**.
+2. Run `supabase/migrations/20261031000000_create_monitoring_tables.sql`.
+   The tables have row-level security enabled; only the Vercel server uses the
+   service-role key, which must never be exposed in browser code.
+3. In the Vercel project, add `SUPABASE_URL` and the sensitive
+   `SUPABASE_SERVICE_ROLE_KEY` for Production. Add them to Preview and
+   Development too if those environments should use the database.
+4. Redeploy `secure-app` so its serverless API picks up the new variables.
+
+The ESP32 continues to post to `/api/telemetry`; Vercel validates each device
+token and relays readings and remote-control commands to Supabase. The
+dashboard continues to poll `/api/status` once a second. No hardware protocol
+change or additional firmware secret is needed for this backend swap.
 
 ## Install S.E.C.U.R.E-App
 

@@ -1,4 +1,4 @@
-import { get } from "@vercel/blob";
+import { readTelemetry } from "../lib/supabase-store.js";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
@@ -9,19 +9,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const blob = await get("telemetry/latest.json", {
-      access: "private",
-      useCache: false,
-    });
-
-    if (!blob) {
+    const telemetry = await readTelemetry();
+    if (!telemetry) {
       return res.status(200).json({ ok: true, available: false });
     }
 
-    const telemetry = JSON.parse(await new Response(blob.stream).text());
     return res.status(200).json({ ok: true, available: true, ...telemetry });
   } catch (error) {
-    console.error("Could not read AquaGuard telemetry.", error);
+    console.error("Could not read S.E.C.U.R.E-App telemetry.", error);
     return res.status(503).json({ ok: false, error: "Could not load telemetry." });
   }
 }

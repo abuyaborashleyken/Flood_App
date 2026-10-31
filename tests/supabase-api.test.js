@@ -1,0 +1,237 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import controlHandler from "../api/control.js";
+import statusHandler from "../api/status.js";
+import telemetryHandler from "../api/telemetry.js";
+import { createControlSession } from "../lib/control-auth.js";
+
+const serviceUrl = "https://secure-project.supabase.co";
+const serviceKey = "test-service-role-key";
+const controlPassword = "a-private-control-passphrase-with-more-than-16-characters";
+const validTelemetry = {
+  status: "safe",
+  distanceCm: 15,
+  ultrasonicOk: true,
+  levelPercent: 0,
+  waterHeightCm: 0,
+  ledOn: false,
+  green: true,
+  yellow: false,
+  red: false,
+  buzzer: false,
+  buzzerMode: "Active HIGH",
+  buzzerType: "active",
+  buzzerTest: false,
+  changeAlertCm: 1,
+  lastAlertDeltaCm: 2,
+  lastAlertDistanceCm: 15,
+  lastAlertDirection: "Rising water",
+  lastAlertAgeSec: 1,
+  distanceChangeAlertCount: 0,
+  clients: 1,
+  uptime: 10,
+  commandAck: "",
+};
+
+function createResponse() {
+  return {
+    headers: {},
+    statusCode: 200,
+    setHeader(name, value) {
+      this.headers[name] = value;
+    },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    },
+  };
+}
+
+function setEnvironment(values) {
+  const previous = new Map(Object.keys(values).map(key => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  return () => {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+}
+
+function mockSupabase(handler) {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(input);
+    requests.push({ url, init });
+    const result = await handler(url, init);
+    const status = result.status ?? 200;
+    return new Response(status === 204 ? null : result.body ?? "", {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  return {
+    requests,
+    restore() {
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
+test("status API returns the latest Supabase telemetry without caching", async () => {
+  const restoreEnvironment = setEnvironment({
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const supabase = mockSupabase(() => ({
+    body: JSON.stringify([{ data: { ...validTelemetry, receivedAt: "2026-10-31T12:00:00.000Z" } }]),
+  }));
+  try {
+    const response = createResponse();
+    await statusHandler({ method: "GET", headers: {} }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.available, true);
+    assert.equal(response.body.distanceCm, 15);
+    assert.equal(response.headers["Cache-Control"], "no-store");
+    assert.equal(supabase.requests[0].url.pathname, "/rest/v1/secure_telemetry");
+    assert.equal(supabase.requests[0].init.headers.apikey, serviceKey);
+    assert.equal(supabase.requests[0].init.headers.Authorization, `Bearer ${serviceKey}`);
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
+test("telemetry API saves hardware readings and returns a pending device command", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const commandId = "123e4567-e89b-42d3-a456-426614174000";
+  const supabase = mockSupabase(url => {
+    if (url.pathname.endsWith("/secure_control_command")) {
+      return {
+        body: JSON.stringify([{
+          command_id: commandId,
+          action: "off",
+          expires_at: new Date(Date.now() + 30_000).toISOString(),
+        }]),
+      };
+    }
+    return { status: 201 };
+  });
+  try {
+    const response = createResponse();
+    await telemetryHandler({
+      method: "POST",
+      headers: { authorization: "Bearer a-valid-device-token" },
+      body: validTelemetry,
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body.command, { id: commandId, action: "off" });
+    assert.equal(supabase.requests[0].url.pathname, "/rest/v1/secure_telemetry");
+    assert.equal(supabase.requests[0].init.method, "POST");
+    assert.equal(supabase.requests[1].url.pathname, "/rest/v1/secure_control_command");
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
+test("telemetry acknowledgement deletes only the matching Supabase command", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const commandId = "123e4567-e89b-42d3-a456-426614174000";
+  const supabase = mockSupabase(url => url.pathname.endsWith("/secure_control_command")
+    ? {
+      body: JSON.stringify([{
+        command_id: commandId,
+        action: "on",
+        expires_at: new Date(Date.now() + 30_000).toISOString(),
+      }]),
+    }
+    : { status: 204 });
+  try {
+    const response = createResponse();
+    await telemetryHandler({
+      method: "POST",
+      headers: { authorization: "Bearer a-valid-device-token" },
+      body: { ...validTelemetry, commandAck: commandId },
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body, { ok: true });
+    assert.equal(supabase.requests[2].init.method, "DELETE");
+    assert.match(supabase.requests[2].url.search, new RegExp(`command_id=eq\\.${commandId}`));
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
+test("control API queues a signed-in command in Supabase", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_CONTROL_PASSWORD: controlPassword,
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const supabase = mockSupabase(() => ({ status: 201 }));
+  try {
+    const session = createControlSession(controlPassword);
+    const response = createResponse();
+    await controlHandler({
+      method: "POST",
+      headers: {
+        origin: "https://secure-app-live.vercel.app",
+        host: "secure-app-live.vercel.app",
+        cookie: `__Secure-aquaguard_control=${session.value}`,
+      },
+      body: { action: "on" },
+    }, response);
+
+    assert.equal(response.statusCode, 202);
+    assert.equal(response.body.ok, true);
+    const queued = JSON.parse(supabase.requests[0].init.body)[0];
+    assert.equal(queued.action, "on");
+    assert.equal(queued.singleton, true);
+    assert.equal(queued.command_id, response.body.commandId);
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
+test("missing Supabase configuration fails explicitly instead of returning empty readings", async () => {
+  const restoreEnvironment = setEnvironment({});
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const originalConsoleError = console.error;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  console.error = () => {};
+  try {
+    const response = createResponse();
+    await statusHandler({ method: "GET", headers: {} }, response);
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.available, undefined);
+  } finally {
+    console.error = originalConsoleError;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+    restoreEnvironment();
+  }
+});

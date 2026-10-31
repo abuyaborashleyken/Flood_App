@@ -1,4 +1,8 @@
-import { del, get, put } from "@vercel/blob";
+import {
+  clearPendingCommand,
+  readPendingCommand,
+  saveTelemetry,
+} from "../lib/supabase-store.js";
 import {
   isAuthorizedAuthorizationHeader,
   normalizeTelemetry,
@@ -28,43 +32,32 @@ export default async function handler(req, res) {
   }
 
   try {
-    await put("telemetry/latest.json", JSON.stringify(telemetry), {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      contentType: "application/json",
-      cacheControlMaxAge: 0,
-    });
-
-    const command = await get("control/pending.json", {
-      access: "private",
-      useCache: false,
-    });
+    await saveTelemetry(telemetry);
+    const command = await readPendingCommand();
     if (!command) return res.status(200).json({ ok: true });
 
-    const pending = JSON.parse(await new Response(command.stream).text());
     if (
-      typeof pending.id !== "string" ||
-      typeof pending.action !== "string" ||
-      !["on", "off"].includes(pending.action) ||
-      !Number.isSafeInteger(pending.expiresAt)
+      typeof command.id !== "string" ||
+      typeof command.action !== "string" ||
+      !["on", "off"].includes(command.action) ||
+      !Number.isFinite(command.expiresAt)
     ) {
       console.error("Discarding malformed AquaGuard remote control command.");
-      await del(command.blob.url, { ifMatch: command.blob.etag });
+      if (typeof command.id === "string") await clearPendingCommand(command.id);
       return res.status(200).json({ ok: true });
     }
 
-    if (telemetry.commandAck === pending.id || pending.expiresAt <= Date.now()) {
-      await del(command.blob.url, { ifMatch: command.blob.etag });
+    if (telemetry.commandAck === command.id || command.expiresAt <= Date.now()) {
+      await clearPendingCommand(command.id);
       return res.status(200).json({ ok: true });
     }
 
     return res.status(200).json({
       ok: true,
-      command: { id: pending.id, action: pending.action },
+      command: { id: command.id, action: command.action },
     });
   } catch (error) {
-    console.error("Could not save AquaGuard telemetry or read a pending command.", error);
+    console.error("Could not save telemetry or read a pending command.", error);
     return res.status(503).json({
       ok: false,
       error: "Could not save telemetry or read a pending command.",

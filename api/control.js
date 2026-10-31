@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { put } from "@vercel/blob";
+import { queueControlCommand } from "../lib/supabase-store.js";
 import {
   isAuthorizedControlCookie,
   isSameOriginRequest,
@@ -36,13 +36,7 @@ export default async function handler(req, res) {
   };
 
   try {
-    await put("control/pending.json", JSON.stringify(command), {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      contentType: "application/json",
-      cacheControlMaxAge: 0,
-    });
+    await queueControlCommand(command);
     return res.status(202).json({ ok: true, commandId: command.id });
   } catch (error) {
     console.error("Could not queue AquaGuard remote control command.", error);
