@@ -73,7 +73,7 @@ constexpr uint32_t WARNING_BUZZER_OFF_MS = 500;
 constexpr uint32_t CRITICAL_BUZZER_ON_MS = 300;
 constexpr uint32_t CRITICAL_BUZZER_OFF_MS = 300;
 constexpr uint32_t BUZZER_POWER_OFF_DELAY_MS = 5000;
-constexpr uint32_t CLOUD_TELEMETRY_INTERVAL_MS = 30000;
+constexpr uint32_t CLOUD_TELEMETRY_INTERVAL_MS = 5000;
 
 constexpr uint32_t SAMPLE_INTERVAL_MS = 420;
 constexpr uint32_t ECHO_TIMEOUT_US = 27000;

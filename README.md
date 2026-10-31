@@ -16,9 +16,9 @@ https://aquaguard-flood-dashboard.vercel.app
 
 The ESP32 continues to broadcast its local `S.E.C.U.R.E` network while joining
 the router network. The Vercel dashboard uses the same design as the local
-device dashboard. Cloud readings are sent every 30 seconds. The cloud
-dashboard is read-only; controls on the local dashboard continue to work only
-on the ESP32 network.
+device dashboard. Cloud readings are sent every 5 seconds and the dashboard
+refreshes every 5 seconds. The cloud dashboard is read-only; controls on the
+local dashboard continue to work only on the ESP32 network.
 
 ## Vercel project
 
