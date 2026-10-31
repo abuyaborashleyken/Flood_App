@@ -7,21 +7,18 @@ https://aquaguard-flood-dashboard.vercel.app
 
 ## Connect the ESP32 to the internet
 
-1. Copy `SECURE_MONITORING/secrets.example.h` to
-   `SECURE_MONITORING/secrets.h`.
-2. Set `AQUAGUARD_WIFI_SSID` and `AQUAGUARD_WIFI_PASSWORD` to the 2.4 GHz
-   router network the ESP32 can join. Keep `secrets.h` private; Git ignores it.
-3. Keep the generated `AQUAGUARD_DEVICE_TOKEN` in `secrets.h`. It must match
-   the Vercel project secret and must not be shared or committed.
-4. Open `SECURE_MONITORING/SECURE_MONITORING.ino` in Arduino IDE, install the
+1. The router Wi-Fi credentials and generated device token are configured in
+   the local `SECURE_MONITORING/secrets.h`. Do not replace that file with the
+   example: it is Git-ignored and must remain private.
+2. Open `SECURE_MONITORING/SECURE_MONITORING.ino` in Arduino IDE, install the
    ESP32 board support if needed, select the connected ESP32 board and port,
    then upload the sketch.
 
 The ESP32 continues to broadcast its local `S.E.C.U.R.E` network while joining
-the router network. Cloud readings are sent every 30 seconds. The Vercel
-dashboard refreshes automatically and shows the age of the latest reading.
-The cloud dashboard is read-only; controls on the local dashboard continue to
-work only on the ESP32 network.
+the router network. The Vercel dashboard uses the same design as the local
+device dashboard. Cloud readings are sent every 30 seconds. The cloud
+dashboard is read-only; controls on the local dashboard continue to work only
+on the ESP32 network.
 
 ## Vercel project
 

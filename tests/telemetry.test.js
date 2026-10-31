@@ -16,6 +16,16 @@ const validPayload = {
   yellow: true,
   red: false,
   buzzer: true,
+  buzzerMode: "Active HIGH",
+  buzzerType: "active",
+  buzzerTest: false,
+  changeAlertCm: 1,
+  lastAlertDeltaCm: 1.5,
+  lastAlertDistanceCm: 9.5,
+  lastAlertDirection: "Rising water",
+  lastAlertAgeSec: 2,
+  distanceChangeAlertCount: 4,
+  clients: 1,
   uptime: 1200,
 };
 
