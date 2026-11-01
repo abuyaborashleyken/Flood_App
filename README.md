@@ -1,7 +1,7 @@
-# S.E.C.U.R.E-App water level monitor
+# S.E.C.U.R.E APPLICATION water level monitor
 
 The ESP32 keeps its local dashboard at `http://192.168.4.1` and can also send
-sensor readings to the live S.E.C.U.R.E-App dashboard:
+sensor readings to the live S.E.C.U.R.E APPLICATION dashboard:
 
 https://secure-app-live.vercel.app
 
@@ -28,7 +28,7 @@ password to unlock remote control. The cloud dashboard cannot switch a pump,
 mains circuit, or other power supply. Wi-Fi and cloud latency mean readings
 are near-real-time, not instantaneous.
 
-## S.E.C.U.R.E-App deployment
+## S.E.C.U.R.E APPLICATION deployment
 
 The Vercel project is `secure-app`, published at
 https://secure-app-live.vercel.app. The previous
@@ -58,7 +58,7 @@ token and relays readings and remote-control commands to Supabase. The
 dashboard continues to poll `/api/status` once a second. No hardware protocol
 change or additional firmware secret is needed for this backend swap.
 
-## Install S.E.C.U.R.E-App
+## Install S.E.C.U.R.E APPLICATION
 
 Open the dashboard over HTTPS in a supported browser and choose **Install app**
 in the header. On iPhone or iPad, open the dashboard in Safari, tap **Share**,
