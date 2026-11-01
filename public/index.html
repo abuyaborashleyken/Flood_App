@@ -116,12 +116,34 @@ select.driver-select{width:100%;border:1px solid #dae3ed;border-radius:10px;padd
 .install-app-button:hover{background:#254368}
 .install-app-button:focus-visible{outline:3px solid #8bb5ff;outline-offset:3px}
 .install-app-button[hidden]{display:none}
-.install-dialog{width:min(460px,calc(100vw - 24px));padding:20px}
-.install-dialog h2{margin:0;font-size:20px}
-.install-dialog p{color:#718096;line-height:1.6}
-.install-instructions{margin:18px 0 0;padding-left:22px;color:var(--ink);line-height:1.8}
-.install-dialog::backdrop{background:#0b183a99;backdrop-filter:blur(3px)}
-@media(max-width:680px){.install-app-button{height:40px;padding:0 10px}.install-dialog{inset:50% auto auto 50%;transform:translate(-50%,-50%);max-height:calc(100dvh - 24px);overflow:auto}}
+.install-dialog{position:fixed;inset:50% auto auto 50%;transform:translate(-50%,-50%);margin:0;width:min(760px,calc(100vw - 28px));max-height:min(88dvh,820px);overflow:auto;border:1px solid #dce5f0;border-radius:22px;padding:0;background:#f7f9fc;color:var(--ink);box-shadow:0 28px 80px #06152f55}
+.install-dialog::backdrop{background:#08162dcc;backdrop-filter:blur(5px)}
+.install-dialog-header{display:flex;align-items:flex-start;gap:15px;padding:24px 24px 20px;background:linear-gradient(130deg,#10294c,#0d1e39);color:white}
+.install-dialog-heading{flex:1;min-width:0}
+.install-dialog-icon{width:46px;height:46px;flex:none;display:grid;place-items:center;border:1px solid #6684a9;border-radius:14px;background:#ffffff12;color:#b8dafa}
+.install-dialog-icon svg{width:24px;height:24px}
+.install-dialog-kicker{margin:0 0 5px;color:#a8c8ed;font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase}
+.install-dialog h2{margin:0;font-size:clamp(20px,4vw,25px);letter-spacing:-.5px}
+.install-dialog-description{margin:6px 0 0;color:#d0def0;font-size:13px;line-height:1.55}
+.install-dialog-close{width:40px;height:40px;flex:none;border:1px solid #ffffff36;border-radius:11px;background:#ffffff12;color:white;font-size:24px;line-height:1}
+.install-dialog-close:hover{background:#ffffff24}
+.install-dialog-close:focus-visible,.install-native-button:focus-visible,.install-app-button:focus-visible{outline:3px solid #8bb5ff;outline-offset:3px}
+.install-platforms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:18px 20px 14px}
+.install-platform{min-width:0;padding:16px;border:1px solid #e1e8f1;border-radius:16px;background:white}
+.install-platform-current{border-color:#9bbcf2;box-shadow:0 0 0 2px #e6efff}
+.install-platform-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.install-platform h3{margin:0;color:#243651;font-size:14px;letter-spacing:-.2px}
+.install-platform-badge{padding:4px 7px;border-radius:20px;background:#e9f1ff;color:#245fc9;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;white-space:nowrap}
+.install-platform-badge[hidden]{display:none}
+.install-platform ol{margin:0;padding-left:19px;color:#596b82;font-size:12px;line-height:1.65}
+.install-platform li+li{margin-top:8px}
+.install-dialog-footer{padding:0 20px 20px}
+.install-native-button{width:100%;min-height:44px;border:0;border-radius:11px;background:#245fc9;color:white;font-size:14px;font-weight:800}
+.install-native-button:hover{background:#194fae}
+.install-native-button[hidden]{display:none}
+.install-help{margin:11px 0 0;color:#7a899d;font-size:11px;line-height:1.55}
+.install-status{min-height:18px;margin:9px 0 0;color:#18724f;font-size:12px;font-weight:700}
+@media(max-width:680px){.install-app-button{height:40px;padding:0 10px}.install-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:18px}.install-dialog-header{gap:10px;padding:18px 15px 15px}.install-dialog-icon{width:38px;height:38px;border-radius:11px}.install-dialog-close{width:38px;height:38px}.install-platforms{grid-template-columns:1fr;gap:9px;padding:12px}.install-platform{padding:13px}.install-platform-top{margin-bottom:7px}.install-platform li+li{margin-top:5px}.install-dialog-footer{padding:0 12px 14px}}
 .sidebar-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.sidebar-head .sidebar-label{padding-bottom:0}.sidebar-menu-toggle{width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--line);border-radius:11px;background:#fff;color:#52647c}.sidebar-menu-toggle:hover{background:#f1f5fb;color:#245fc9}.sidebar-menu-toggle svg{width:19px;height:19px}.sidebar-toggle-text,.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .app-shell{transition:grid-template-columns .2s ease}.app-shell.sidebar-collapsed{grid-template-columns:76px minmax(0,1fr)}.sidebar-collapsed .sidebar{align-items:center;padding-right:10px;padding-left:10px}.sidebar-collapsed .sidebar-head{width:100%;justify-content:center}.sidebar-collapsed .sidebar-label,.sidebar-collapsed .sidebar-note,.sidebar-collapsed .side-link span:last-child{display:none}.sidebar-collapsed .side-link{justify-content:center;padding-right:5px;padding-left:5px}.sidebar-collapsed .side-icon{width:auto}
 .connection-clock{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:122px}.connection-clock .clock{text-align:center}.dot.on{animation:connection-pulse 1.4s ease-in-out infinite}.dot.offline{background:#e16a73;box-shadow:0 0 0 4px #e16a7324}@keyframes connection-pulse{0%,100%{box-shadow:0 0 0 3px #4cddaf28}50%{box-shadow:0 0 0 7px #4cddaf08}}
@@ -168,8 +190,8 @@ select.driver-select{width:100%;border:1px solid #dae3ed;border-radius:10px;padd
  .clock strong{font-size:12px}
  .clock small{font-size:9px}
 }
-header{background:transparent}
-.nav{max-width:1500px;min-height:76px;margin:14px auto 0;padding:13px clamp(14px,3vw,30px);border-radius:24px;background:#0e213d}
+header{position:sticky;top:0;z-index:1200;background:#0e213d;box-shadow:0 8px 22px #10213b1a}
+.nav{max-width:1500px;min-height:76px;margin:0 auto;padding:13px clamp(14px,3vw,30px);border-radius:0 0 24px 24px;background:#0e213d}
 .brand{min-width:0}
 .brand strong{font-size:clamp(16px,2vw,20px);letter-spacing:-.4px}
 .brand small{letter-spacing:1.2px}
@@ -181,13 +203,13 @@ main{padding:clamp(18px,3vw,38px)}
 .card,.sensor,.side-link,.updated,.toast,.power-dialog,.history-dialog{border-radius:var(--radius)}
 .footer{max-width:1500px;margin:12px auto 22px;padding:12px 18px;border:1px solid var(--line);border-radius:18px;background:#fff;color:#718096;text-align:center;line-height:1.6}
 @media(max-width:900px){
- .nav{margin:10px 12px 0}
+ .nav{margin:0 12px}
  .app-shell{margin:10px 12px 0;min-height:0;grid-template-columns:210px minmax(0,1fr)}
  .cols,.lower{grid-template-columns:1fr}
  .status-card,.level-card{min-height:245px}
 }
 @media(max-width:680px){
- .nav{margin:8px 8px 0;padding:10px 12px;border-radius:18px;gap:8px;flex-wrap:wrap}
+ .nav{margin:0 8px;padding:10px 12px;border-radius:0 0 18px 18px;gap:8px;flex-wrap:wrap}
  .brand{gap:8px}
  .logo{width:40px;height:40px}
  .brand strong{font-size:16px}
