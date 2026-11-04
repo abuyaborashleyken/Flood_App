@@ -108,6 +108,48 @@ test("status API returns the latest Supabase telemetry without caching", async (
   }
 });
 
+test("status API hides telemetry after the device goes offline", async () => {
+  const restoreEnvironment = setEnvironment({
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const supabase = mockSupabase(() => ({
+    body: JSON.stringify([{ data: { ...validTelemetry, receivedAt: new Date(Date.now() - 90_000).toISOString() } }]),
+  }));
+  try {
+    const response = createResponse();
+    await statusHandler({ method: "GET", headers: {} }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body, { ok: true, available: false });
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
+test("status API keeps fresh telemetry online when the writer clock is slightly ahead", async () => {
+  const restoreEnvironment = setEnvironment({
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const receivedAt = new Date(Date.now() + 10_000).toISOString();
+  const supabase = mockSupabase(() => ({
+    body: JSON.stringify([{ data: { ...validTelemetry, receivedAt } }]),
+  }));
+  try {
+    const response = createResponse();
+    await statusHandler({ method: "GET", headers: {} }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.available, true);
+    assert.equal(response.body.receivedAt, receivedAt);
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
 test("telemetry API saves hardware readings and returns a pending device command", async () => {
   const restoreEnvironment = setEnvironment({
     AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",

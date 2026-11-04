@@ -1,4 +1,5 @@
 import { readTelemetry } from "../lib/supabase-store.js";
+import { isTelemetryFresh } from "../lib/telemetry.js";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
@@ -11,6 +12,10 @@ export default async function handler(req, res) {
   try {
     const telemetry = await readTelemetry();
     if (!telemetry) {
+      return res.status(200).json({ ok: true, available: false });
+    }
+
+    if (!isTelemetryFresh(telemetry.receivedAt)) {
       return res.status(200).json({ ok: true, available: false });
     }
 

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   isAuthorizedAuthorizationHeader,
+  isTelemetryFresh,
   normalizeTelemetry,
 } from "../lib/telemetry.js";
 
@@ -54,6 +55,19 @@ test("rejects malformed or out-of-range telemetry", () => {
   assert.equal(normalizeTelemetry({ ...validPayload, ultrasonicOk: 1 }, "now"), null);
   assert.equal(normalizeTelemetry({ ...validPayload, status: "unknown" }, "now"), null);
   assert.equal(normalizeTelemetry({ ...validPayload, commandAck: "not-an-id" }, "now"), null);
+});
+
+test("accepts fresh telemetry with small server-to-browser clock skew", () => {
+  const now = Date.parse("2026-11-04T14:00:00.000Z");
+  assert.equal(isTelemetryFresh(now + 29_999, now), true);
+  assert.equal(isTelemetryFresh(now - 89_999, now), true);
+});
+
+test("rejects telemetry outside freshness and clock-skew limits", () => {
+  const now = Date.parse("2026-11-04T14:00:00.000Z");
+  assert.equal(isTelemetryFresh(now + 30_001, now), false);
+  assert.equal(isTelemetryFresh(now - 90_000, now), false);
+  assert.equal(isTelemetryFresh("not a timestamp", now), false);
 });
 
 test("accepts a valid remote-control acknowledgement", () => {
