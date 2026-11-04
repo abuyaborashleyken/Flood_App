@@ -250,6 +250,35 @@ main{padding:clamp(18px,3vw,38px)}
  .level-card{align-items:flex-start}
  .tank{width:92px;height:92px}
 }
+@media(max-width:680px){
+ .nav{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding:12px 14px}
+ .brand{min-width:0;gap:9px}
+ .brand strong{font-size:clamp(15px,4.2vw,18px);white-space:nowrap}
+ .brand small{display:block;font-size:9px}
+ .header-tools{display:grid;width:100%;grid-template-columns:minmax(0,1fr) 36px 36px minmax(76px,auto);align-items:center;gap:6px;margin:0}
+ .power-source-toggle{justify-self:start;min-width:0;max-width:100%;min-height:36px}
+ .alert-sound-button,.notification-button{width:36px;height:36px}
+ .connection-clock{display:flex;flex-direction:row;align-items:center;justify-self:end;min-width:0;gap:6px}
+ .connection-clock .clock{display:block;min-width:0;text-align:right}
+ .clock strong{font-size:12px}
+ .clock small{font-size:9px;white-space:nowrap}
+}
+@media(max-width:380px){
+ .nav{padding:10px 12px;gap:8px}
+ .brand strong{font-size:14px}
+ .brand small{font-size:8px}
+ .logo{width:36px;height:36px}
+ .header-tools{grid-template-columns:minmax(0,1fr) 32px 32px minmax(72px,auto);gap:5px}
+ .power-source-toggle{min-height:34px;gap:4px;padding:5px 6px;font-size:10px}
+ .power-source-toggle #powerToggleState{display:none}
+ .power-switch-track{width:26px;height:16px}
+ .power-switch-track:after{width:10px;height:10px}
+ .power-source-toggle[aria-pressed="true"] .power-switch-track:after{transform:translateX(10px)}
+ .alert-sound-button,.notification-button{width:32px;height:32px}
+ .alert-sound-button svg,.notification-button svg{width:16px;height:16px}
+ .clock strong{font-size:11px}
+ .clock small{font-size:8px}
+}
 </style>
 </head>
 <body>
