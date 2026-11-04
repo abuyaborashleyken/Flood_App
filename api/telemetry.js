@@ -1,4 +1,5 @@
 import {
+  broadcastTelemetry,
   clearPendingCommand,
   readPendingCommand,
   saveTelemetry,
@@ -33,7 +34,12 @@ export default async function handler(req, res) {
 
   try {
     await saveTelemetry(telemetry);
-    const command = await readPendingCommand();
+    const broadcastPromise = process.env.SUPABASE_ANON_KEY
+      ? broadcastTelemetry(telemetry).catch(error => {
+        console.error("Could not broadcast the latest telemetry to connected dashboards.", error);
+      })
+      : Promise.resolve();
+    const [command] = await Promise.all([readPendingCommand(), broadcastPromise]);
     if (!command) return res.status(200).json({ ok: true });
 
     if (

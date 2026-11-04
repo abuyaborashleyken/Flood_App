@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import controlHandler from "../api/control.js";
+import realtimeConfigHandler from "../api/realtime-config.js";
 import statusHandler from "../api/status.js";
 import telemetryHandler from "../api/telemetry.js";
 import { createControlSession } from "../lib/control-auth.js";
@@ -89,7 +90,7 @@ test("status API returns the latest Supabase telemetry without caching", async (
     SUPABASE_SERVICE_ROLE_KEY: serviceKey,
   });
   const supabase = mockSupabase(() => ({
-    body: JSON.stringify([{ data: { ...validTelemetry, receivedAt: "2026-10-31T12:00:00.000Z" } }]),
+    body: JSON.stringify([{ data: { ...validTelemetry, receivedAt: new Date().toISOString() } }]),
   }));
   try {
     const response = createResponse();
@@ -150,6 +151,115 @@ test("status API keeps fresh telemetry online when the writer clock is slightly 
   }
 });
 
+test("realtime config exposes only the public key and Supabase URL", () => {
+  const restoreEnvironment = setEnvironment({
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_ANON_KEY: "test-publishable-key",
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  try {
+    const response = createResponse();
+    realtimeConfigHandler({ method: "GET" }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["Cache-Control"], "no-store");
+    assert.deepEqual(response.body, {
+      ok: true,
+      enabled: true,
+      url: serviceUrl,
+      publishableKey: "test-publishable-key",
+    });
+    assert.equal(JSON.stringify(response.body).includes(serviceKey), false);
+  } finally {
+    restoreEnvironment();
+  }
+});
+
+test("realtime config remains disabled until a public key is configured", () => {
+  const restoreEnvironment = setEnvironment({ SUPABASE_URL: serviceUrl });
+  const previousKey = process.env.SUPABASE_ANON_KEY;
+  delete process.env.SUPABASE_ANON_KEY;
+  try {
+    const response = createResponse();
+    realtimeConfigHandler({ method: "GET" }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body, { ok: true, enabled: false });
+  } finally {
+    if (previousKey === undefined) delete process.env.SUPABASE_ANON_KEY;
+    else process.env.SUPABASE_ANON_KEY = previousKey;
+    restoreEnvironment();
+  }
+});
+
+test("telemetry API broadcasts accepted readings to private Realtime", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+    SUPABASE_ANON_KEY: "test-publishable-key",
+  });
+  const supabase = mockSupabase(url => url.pathname.includes("/realtime/v1/")
+    ? { status: 200 }
+    : url.pathname.endsWith("/secure_control_command")
+      ? { body: "[]" }
+      : { status: 201 });
+  try {
+    const response = createResponse();
+    await telemetryHandler({
+      method: "POST",
+      headers: { authorization: "Bearer a-valid-device-token" },
+      body: validTelemetry,
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    const broadcast = supabase.requests.find(request =>
+      request.url.pathname === "/realtime/v1/api/broadcast/secure-telemetry/events/reading"
+    );
+    assert.ok(broadcast);
+    assert.equal(broadcast.url.searchParams.get("private"), "true");
+    assert.equal(broadcast.init.headers.apikey, serviceKey);
+    assert.deepEqual(JSON.parse(broadcast.init.body).telemetry, {
+      ...validTelemetry,
+      receivedAt: JSON.parse(broadcast.init.body).telemetry.receivedAt,
+    });
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
+test("telemetry remains accepted when the optional realtime broadcast fails", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+    SUPABASE_ANON_KEY: "test-publishable-key",
+  });
+  const supabase = mockSupabase(url => url.pathname.includes("/realtime/v1/")
+    ? { status: 503 }
+    : url.pathname.endsWith("/secure_control_command")
+      ? { body: "[]" }
+      : { status: 201 });
+  const originalConsoleError = console.error;
+  const errors = [];
+  console.error = (...args) => errors.push(args.join(" "));
+  try {
+    const response = createResponse();
+    await telemetryHandler({
+      method: "POST",
+      headers: { authorization: "Bearer a-valid-device-token" },
+      body: validTelemetry,
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.match(errors[0], /Could not broadcast the latest telemetry/);
+  } finally {
+    console.error = originalConsoleError;
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
 test("telemetry API saves hardware readings and returns a pending device command", async () => {
   const restoreEnvironment = setEnvironment({
     AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",

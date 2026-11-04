@@ -57,6 +57,13 @@ The ESP32 continues to post to `/api/telemetry`; Vercel validates each device
 token and relays readings and remote-control commands to Supabase. The
 dashboard continues to poll `/api/status` once a second. No hardware protocol
 change or additional firmware secret is needed for this backend swap.
+### Enable realtime delivery
+
+The dashboard subscribes to Supabase Realtime broadcasts and keeps the one-second
+status polling as a fallback. Apply
+`supabase/migrations/20261105000000_allow_secure_telemetry_realtime.sql` and set
+`SUPABASE_ANON_KEY` in Vercel to the Supabase publishable key. This key is safe
+for browser use; keep `SUPABASE_SERVICE_ROLE_KEY` server-only.
 
 ## Install S.E.C.U.R.E APPLICATION
 
