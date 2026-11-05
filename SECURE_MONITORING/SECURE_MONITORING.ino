@@ -663,80 +663,19 @@ h1{
 .mini div{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .mini span{color:var(--ink-muted)}
 .mini b{color:var(--ink-primary);font-family:var(--font-mono);font-size:13px}
-.tank{
-  height:170px;
-  width:140px;
+.home-illustration{
+  width:76px;
+  height:76px;
   flex:none;
-  position:relative;
-  background:linear-gradient(180deg,#f8fafc,#edf2f7);
-  border:3px solid #cbd5e1;
-  border-radius:24px 24px 18px 18px;
-  overflow:hidden;
-  box-shadow:inset 0 2px 6px rgba(0,0,0,.08),0 8px 20px rgba(15,23,42,.06);
+  display:grid;
+  place-items:center;
+  border-radius:16px;
+  background:#f0faff;
+  color:#42bfe5;
 }
-.tank::before{
-  content:"";
-  position:absolute;
-  left:0;
-  top:0;
-  bottom:0;
-  width:12px;
-  background:repeating-linear-gradient(to bottom,transparent 0,transparent 33px,#94a3b8 34px,#94a3b8 35px);
-  z-index:4;
-  opacity:.7;
-  pointer-events:none;
-}
-.tank::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  background:linear-gradient(90deg,rgba(255,255,255,.45) 0%,rgba(255,255,255,0) 40%,rgba(255,255,255,.25) 100%);
-  z-index:5;
-  pointer-events:none;
-  border-radius:inherit;
-}
-.tank-water{
-  position:absolute;
-  bottom:0;
-  left:0;
-  right:0;
-  height:0%;
-  background:linear-gradient(180deg,#38bdf8 0%,#2563eb 50%,#1d4ed8 100%);
-  transition:height .75s cubic-bezier(.34,1.25,.64,1);
-  min-height:0;
-  z-index:2;
-}
-.tank-water::before{
-  content:"";
-  position:absolute;
-  top:-4px;
-  left:0;
-  right:0;
-  height:8px;
-  background:#bae6fd;
-  border-radius:50%;
-  box-shadow:0 0 10px #38bdf8;
-  animation:wave-crest 3s ease-in-out infinite alternate;
-}
-@keyframes wave-crest{
-  0%{transform:scaleY(.8) translateY(0)}
-  100%{transform:scaleY(1.3) translateY(1px)}
-}
-.tank-text{
-  position:absolute;
-  inset:auto 12px 14px 12px;
-  padding:6px 0;
-  background:rgba(11,19,41,.75);
-  backdrop-filter:blur(8px);
-  color:#fff;
-  border:1px solid rgba(255,255,255,.2);
-  border-radius:8px;
-  text-align:center;
-  font-family:var(--font-mono);
-  font-size:14px;
-  font-weight:900;
-  z-index:6;
-  box-shadow:0 4px 12px rgba(0,0,0,.15);
+.home-illustration svg{
+  width:42px;
+  height:42px;
 }
 .stats-title{
   display:flex;
@@ -1134,7 +1073,8 @@ dialog::backdrop{background:rgba(11,19,41,.6);backdrop-filter:blur(6px)}
   main{padding:18px 14px 28px}
   .sensors{gap:10px}
   .status-card,.level-card{min-height:240px;padding:18px}
-  .tank{height:140px;width:115px}
+  .home-illustration{width:64px;height:64px}
+  .home-illustration svg{width:38px;height:38px}
 }
 @media(max-width:480px){
   .header-tools{gap:4px}
@@ -1300,9 +1240,11 @@ dialog::backdrop{background:rgba(11,19,41,.6);backdrop-filter:blur(6px)}
               </div>
             </div>
           </div>
-          <div class="tank" role="img" aria-label="Real-time water reservoir visualizer">
-            <div class="tank-water" id="tankWater"></div>
-            <div class="tank-text" id="tankText">—</div>
+          <div class="home-illustration" role="img" aria-label="Home">
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+              <path d="M5 21 24 4l19 17M10 19v24h28V19M18 43V29h12v14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8"/>
+              <path d="M14 23h5v5h-5z" fill="currentColor" opacity=".22"/>
+            </svg>
           </div>
         </section>
       </div>
@@ -1658,7 +1600,7 @@ offline=function(){
  if(el('powerDialog').open)closePowerDialog();
  draw();
 };
-function offline(){el('linkDot').classList.remove('on');el('linkDot').classList.add('offline');el('linkDot').setAttribute('aria-label','Not connected');el('updated').textContent='Connection lost';el('mainStatus').textContent='No readings';el('mainStatus').className='status-title offline';el('mainDescription').textContent='Connect your phone to the S.E.C.U.R.E network and open 192.168.4.1.';el('condition').textContent='Water level is not available';el('ultraHealth').textContent='No reading';el('heightCard').textContent='—';el('level').textContent='—';el('tankText').textContent='—';el('tankWater').style.height='0%';el('height').textContent='—';el('distance').textContent='—';el('distanceCard').textContent='—';el('alertLevel').textContent='—';el('buzzer').textContent='—';el('buzzerMode').textContent='—';el('changeAlerts').textContent='—';el('changeDelta').textContent='—';el('changeCount').textContent='—';el('clients').textContent='—';el('uptime').textContent='—';setLED('ledGreen',false);setLED('ledYellow',false);setLED('ledRed',false);el('monitorLoadLed').textContent='—';el('powerSourceToggle').disabled=true;}
+function offline(){el('linkDot').classList.remove('on');el('linkDot').classList.add('offline');el('linkDot').setAttribute('aria-label','Not connected');el('updated').textContent='Connection lost';el('mainStatus').textContent='No readings';el('mainStatus').className='status-title offline';el('mainDescription').textContent='Connect your phone to the S.E.C.U.R.E network and open 192.168.4.1.';el('condition').textContent='Water level is not available';el('ultraHealth').textContent='No reading';el('heightCard').textContent='—';el('level').textContent='—';el('height').textContent='—';el('distance').textContent='—';el('distanceCard').textContent='—';el('alertLevel').textContent='—';el('buzzer').textContent='—';el('buzzerMode').textContent='—';el('changeAlerts').textContent='—';el('changeDelta').textContent='—';el('changeCount').textContent='—';el('clients').textContent='—';el('uptime').textContent='—';setLED('ledGreen',false);setLED('ledYellow',false);setLED('ledRed',false);el('monitorLoadLed').textContent='—';el('powerSourceToggle').disabled=true;}
 function render(d){el('linkDot').classList.add('on');el('linkDot').classList.remove('offline');el('linkDot').setAttribute('aria-label',preview?'Sample readings':'Connected');el('updated').textContent=(preview?'Updated ':'Updated ')+new Date().toLocaleTimeString();
  const previousStatus=lastStatus;
  notifyStatus(d.status,d.distanceCm);
@@ -1686,7 +1628,7 @@ function render(d){el('linkDot').classList.add('on');el('linkDot').classList.rem
  }
 const messages={safe:['Water is safe','The water is 11 centimeters or more below the device.'],warning:['Water is rising','The water is 7 to less than 11 centimeters below the device.'],critical:['Water is too high','The water is less than 7 centimeters below the device.'],fault:['No water reading','Check that the water reader is connected and dry.']};
 const [heading,desc]=messages[d.status]||messages.fault;el('mainStatus').textContent=heading;el('mainStatus').className='status-title '+(d.status||'fault');el('mainDescription').textContent=desc;el('condition').textContent=!d.ultrasonicOk?'No water reading':'Water is '+Number(d.distanceCm).toFixed(1)+' centimeters below the device';
-el('level').textContent=d.ultrasonicOk?Number(d.distanceCm).toFixed(1):'—';el('tankText').textContent=d.ultrasonicOk?Math.round(d.levelPercent)+'%':'—';el('tankWater').style.height=(d.ultrasonicOk?Math.max(0,Math.min(100,d.levelPercent)):0)+'%';el('levelNote').textContent='Smaller numbers mean the water is closer. The tank picture is an estimate.';
+el('level').textContent=d.ultrasonicOk?Number(d.distanceCm).toFixed(1):'—';el('levelNote').textContent='Smaller numbers mean the water is closer. Water level is estimated against the tank baseline.';
 el('height').textContent=d.ultrasonicOk?Number(d.waterHeightCm).toFixed(1)+' centimeters':'No reading';el('distance').textContent=d.ultrasonicOk?Math.round(d.levelPercent)+'%':'No reading';el('distanceCard').textContent=d.ultrasonicOk?Number(d.distanceCm).toFixed(1)+' centimeters':'No reading';el('ultraHealth').textContent=d.ultrasonicOk?'Working':'No reading';el('heightCard').textContent=d.ultrasonicOk?Number(d.waterHeightCm).toFixed(1)+' centimeters':'No reading';el('alertLevel').textContent=simpleStatus(d.status);
 setLED('ledGreen',d.green);setLED('ledYellow',d.yellow);setLED('ledRed',d.red);el('buzzer').textContent=d.buzzer?'On':'Off';el('buzzer').className=d.buzzer?'alarm':'';el('buzzerMode').textContent=d.buzzerType==='passive'?'Needs the device to make sound':'Makes its own sound';el('changeAlerts').textContent=Number(d.changeAlertCm).toFixed(1)+' centimeters';el('changeDelta').textContent=d.lastAlertDeltaCm>=0?Number(d.lastAlertDeltaCm).toFixed(1)+' centimeters · '+(d.lastAlertDirection==='Rising water'?'Water going up':'Water going down'):'Waiting for a change';el('changeCount').textContent=d.distanceChangeAlertCount||0;el('clients').textContent=d.clients;el('uptime').textContent=secs(d.uptime);
 if(!formLoaded){el('changeCm').value=d.changeAlertCm;el('driverMode').value=d.buzzerType;formLoaded=true}
