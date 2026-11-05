@@ -657,78 +657,210 @@ h1{
 
 /* Water Level & Reservoir Card */
 .level-card{
+  --level-color:#08916b;
+  --level-soft:#e9f8f2;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  gap:14px;
+  min-height:300px;
+  overflow:hidden;
+}
+.level-card[data-level-status="warning"]{
+  --level-color:#d97706;
+  --level-soft:#fff7e6;
+}
+.level-card[data-level-status="critical"]{
+  --level-color:#dc2626;
+  --level-soft:#fef2f2;
+}
+.level-card[data-level-status="fault"],
+.level-card[data-level-status="offline"]{
+  --level-color:#64748b;
+  --level-soft:#f1f5f9;
+}
+.level-card-header{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:20px;
-  min-height:300px;
-}
-.level-meta{
-  flex:1;
+  gap:8px;
   min-width:0;
 }
-.metric{
-  margin:12px 0 6px;
+.level-card-header .card-title{margin:0}
+.level-status{
+  flex:none;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:5px 9px;
+  border-radius:999px;
+  background:var(--level-soft);
+  color:var(--level-color);
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.55px;
+  text-transform:uppercase;
+}
+.level-status::before,
+.level-connection::before{
+  content:"";
+  width:7px;
+  height:7px;
+  flex:none;
+  border-radius:50%;
+  background:currentColor;
+}
+.level-display{
+  display:grid;
+  grid-template-columns:minmax(132px,.95fr) minmax(0,1.05fr);
+  align-items:center;
+  gap:10px;
+  min-width:0;
+}
+.house-illustration{
+  position:relative;
+  width:100%;
+  max-width:220px;
+  aspect-ratio:1 / .94;
+  justify-self:center;
+  overflow:hidden;
+  border-radius:20px;
+  background:linear-gradient(180deg,#f8fbff 0%,#eff6ff 100%);
+}
+.house-illustration svg{
+  display:block;
+  width:100%;
+  height:100%;
+}
+.house-water-layer{
+  transform:translateY(calc(-1 * var(--water-rise,0px)));
+  transition:transform 1.1s cubic-bezier(.22,.75,.25,1),opacity .35s ease;
+}
+.house-water-wave{
+  fill:var(--level-color);
+}
+.house-water-wave.back{
+  opacity:.3;
+  animation:water-drift 5s linear infinite;
+}
+.house-water-wave.front{
+  opacity:.78;
+  animation:water-drift 3.8s linear infinite reverse;
+}
+@keyframes water-drift{
+  to{transform:translateX(-12px)}
+}
+.house-reading{
+  position:absolute;
+  top:65%;
+  left:50%;
+  display:grid;
+  justify-items:center;
+  min-width:76px;
+  padding:5px 10px 6px;
+  border:1px solid rgba(255,255,255,.9);
+  border-radius:12px;
+  background:rgba(255,255,255,.86);
+  box-shadow:0 2px 8px rgba(15,23,42,.1);
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+.house-reading strong{
+  color:var(--level-color);
+  font-family:var(--font-mono);
+  font-size:clamp(22px,3vw,30px);
+  font-weight:900;
+  line-height:1.05;
+}
+.house-reading span{
+  color:var(--ink-muted);
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.65px;
+  text-transform:uppercase;
+}
+.level-readings{
+  display:grid;
+  align-content:center;
+  gap:12px;
+  min-width:0;
+}
+.level-distance-label,
+.level-flood-label{
+  display:block;
+  color:var(--ink-muted);
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.7px;
+  text-transform:uppercase;
+}
+.level-distance-value{
   display:flex;
   align-items:baseline;
-  gap:8px;
-  flex-wrap:wrap;
+  gap:5px;
+  margin:4px 0 3px;
 }
-.metric strong{
-  font-size:clamp(42px,5.5vw,62px);
+.level-distance-value strong{
+  color:var(--ink-primary);
+  font-family:var(--font-mono);
+  font-size:clamp(30px,4vw,43px);
   font-weight:900;
   letter-spacing:-2px;
-  color:var(--ink-primary);
   line-height:1;
-  font-family:var(--font-mono);
 }
-.metric span{
+.level-distance-value span{
   color:var(--ink-muted);
-  font-size:14px;
-  font-weight:700;
+  font-size:12px;
+  font-weight:750;
   text-transform:uppercase;
-  letter-spacing:.8px;
 }
-.helper{
+.level-note{
+  margin:0;
   color:var(--ink-muted);
-  font-size:12px;
-  line-height:1.55;
-  max-width:320px;
+  font-size:10px;
+  line-height:1.45;
 }
-.mini{
-  margin-top:18px;
+.level-flood{
   display:grid;
-  gap:8px;
-  font-size:12px;
-  padding-top:14px;
+  gap:4px;
+  padding-top:10px;
   border-top:1px solid var(--border-subtle);
 }
-.mini div{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:12px;
+.level-flood strong{
+  color:var(--level-color);
+  font-size:13px;
+  font-weight:850;
 }
-.mini span{color:var(--ink-muted)}
-.mini b{
+.level-connection{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:var(--ink-muted);
+  font-size:10px;
+  font-weight:700;
+}
+.level-connection[data-connected="true"]{color:#059669}
+.level-connection[data-connected="false"]{color:#64748b}
+.level-summary{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  padding-top:11px;
+  border-top:1px solid var(--border-subtle);
+}
+.level-summary div{display:grid;gap:3px;min-width:0}
+.level-summary span{
+  color:var(--ink-muted);
+  font-size:10px;
+  line-height:1.35;
+}
+.level-summary b{
   color:var(--ink-primary);
   font-family:var(--font-mono);
-  font-size:13px;
+  font-size:12px;
 }
-
-.home-illustration{
-  width:76px;
-  height:76px;
-  flex:none;
-  display:grid;
-  place-items:center;
-  border-radius:16px;
-  background:#f0faff;
-  color:#42bfe5;
-}
-.home-illustration svg{
-  width:42px;
-  height:42px;
+@media(prefers-reduced-motion:reduce){
+  .house-water-layer{transition:none}
+  .house-water-wave{animation:none!important}
 }
 
 /* 4-Column Telemetry Sensor Grid */
@@ -1658,8 +1790,6 @@ dialog::backdrop{
   main{padding:18px 14px 28px}
   .sensors{gap:10px}
   .status-card,.level-card{min-height:240px;padding:18px}
-  .home-illustration{width:64px;height:64px}
-  .home-illustration svg{width:38px;height:38px}
   .install-platforms{grid-template-columns:1fr}
 }
 @media(max-width:480px){
@@ -1669,6 +1799,10 @@ dialog::backdrop{
   .alert-sound-button,.notification-button{width:34px;height:34px}
   .sensors{grid-template-columns:1fr}
   .config-grid{grid-template-columns:1fr}
+  .level-card{padding:16px}
+  .level-display{grid-template-columns:minmax(112px,.9fr) minmax(0,1fr);gap:6px}
+  .house-reading{min-width:66px;padding:5px 8px}
+  .level-distance-value strong{font-size:clamp(28px,8vw,36px)}
   .power-dialog,.history-dialog{
     inset:68px 10px auto;
     width:calc(100vw - 20px);
@@ -1873,30 +2007,59 @@ dialog::backdrop{
           <div class="condition" id="condition">Checking water reader...</div>
         </section>
 
-        <section class="card level-card">
-          <div class="level-meta">
+        <section class="card level-card" id="levelCard" data-level-status="offline">
+          <div class="level-card-header">
             <p class="card-title">SURFACE CLEARANCE TO SENSOR</p>
-            <div class="metric">
-              <strong id="level">—</strong>
-              <span>centimeters</span>
+            <span class="level-status" id="levelStatus">OFFLINE</span>
+          </div>
+          <div class="level-display">
+            <div class="house-illustration" id="houseIllustration" role="img" aria-label="House illustration. Waiting for live sensor readings.">
+              <svg viewBox="0 0 280 250" aria-hidden="true">
+                <defs>
+                  <clipPath id="houseWaterClip">
+                    <rect x="68" y="106" width="144" height="110" rx="2"/>
+                  </clipPath>
+                </defs>
+                <path d="M60 101 140 30l80 71v119H60z" fill="#fff" stroke="#cbd5e1" stroke-width="3" stroke-linejoin="round"/>
+                <g transform="translate(0 212)" clip-path="url(#houseWaterClip)">
+                  <g class="house-water-layer" id="waterLayer" style="--water-rise:0px">
+                    <path class="house-water-wave back" d="M40 4C60-3 80-3 100 4s40 7 60 0 40-7 60 0 40 7 60 0v120H40z"/>
+                    <path class="house-water-wave front" d="M40 6c20 7 40 7 60 0s40-7 60 0 40 7 60 0 40-7 60 0v120H40z"/>
+                  </g>
+                </g>
+                <path d="M36 105 140 22l104 83M60 98v122h160V98" fill="none" stroke="#334155" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M74 116h132v96H74z" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linejoin="round"/>
+              </svg>
+              <div class="house-reading">
+                <strong id="housePercent">—</strong>
+                <span>tank level</span>
+              </div>
             </div>
-            <div class="helper" id="levelNote">The smaller the number, the closer the water is to the device.</div>
-            <div class="mini">
+            <div class="level-readings">
               <div>
-                <span>Water rise estimate</span>
-                <b id="height">—</b>
+                <span class="level-distance-label">Ultrasonic distance</span>
+                <div class="level-distance-value">
+                  <strong id="level">—</strong>
+                  <span>cm</span>
+                </div>
+                <p class="level-note" id="levelNote">Smaller distance means the water is closer to the sensor.</p>
               </div>
-              <div>
-                <span>Tank capacity level</span>
-                <b id="distance">—</b>
+              <div class="level-flood">
+                <span class="level-flood-label">Flood status</span>
+                <strong id="levelFloodStatus">Waiting for sensor</strong>
               </div>
+              <div class="level-connection" id="levelConnection" role="status" aria-live="polite" data-connected="false">Waiting for live sensor data</div>
             </div>
           </div>
-          <div class="home-illustration" role="img" aria-label="Home">
-            <svg viewBox="0 0 48 48" aria-hidden="true">
-              <path d="M5 21 24 4l19 17M10 19v24h28V19M18 43V29h12v14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8"/>
-              <path d="M14 23h5v5h-5z" fill="currentColor" opacity=".22"/>
-            </svg>
+          <div class="level-summary">
+            <div>
+              <span>Water rise estimate</span>
+              <b id="height">—</b>
+            </div>
+            <div>
+              <span>Tank capacity level</span>
+              <b id="distance">—</b>
+            </div>
           </div>
         </section>
       </div>
@@ -2336,9 +2499,46 @@ el('powerOffButton').addEventListener('click',()=>sendLedCommand('off'));
 el('powerOnButton').addEventListener('click',()=>sendLedCommand('on'));
 el('buzzerToggleBtn').addEventListener('click',()=>sendBuzzerCommand(lastBuzzerEnabled?'off':'on'));
 updateClock();setInterval(updateClock,1000);
+let currentWaterPercent=0;
+function updateHouseWater(percent){
+ currentWaterPercent=percent;
+ const bounds=el('houseIllustration').getBoundingClientRect();
+ const scale=Math.min(bounds.width/280,bounds.height/250);
+ const rise=scale*110*percent/100;
+ const waterLayer=el('waterLayer');
+ waterLayer.style.setProperty('--water-rise',rise+'px');
+ waterLayer.style.opacity=percent===0?'0':'1';
+}
+function updateLevelCard(d,deviceFresh){
+ const sensorAvailable=!!deviceFresh&&d?.ultrasonicOk===true&&
+  ['safe','warning','critical'].includes(d.status)&&
+  Number.isFinite(d.distanceCm)&&d.distanceCm>=2&&d.distanceCm<=400&&
+  Number.isFinite(d.levelPercent)&&d.levelPercent>=0&&d.levelPercent<=100&&
+  Number.isFinite(d.waterHeightCm)&&d.waterHeightCm>=0&&d.waterHeightCm<=15;
+ const percent=sensorAvailable?Math.max(0,Math.min(100,d.levelPercent)):0;
+ const status=sensorAvailable?d.status:'fault';
+ const labels={safe:'SAFE',warning:'WARNING',critical:'CRITICAL'};
+ el('levelCard').dataset.levelStatus=deviceFresh?status:'offline';
+ el('levelStatus').textContent=sensorAvailable?(preview?'SAMPLE · '+labels[status]:labels[status]):(deviceFresh?'SENSOR FAULT':'OFFLINE');
+ el('levelFloodStatus').textContent=sensorAvailable?
+  (preview?'Sample · '+labels[status].toLowerCase():'Water is '+labels[status].toLowerCase()):
+  (deviceFresh?'No sensor reading':'Sensor offline');
+ el('levelConnection').dataset.connected=String(sensorAvailable&&!preview);
+ el('levelConnection').textContent=preview?'Sample preview · not live data':
+  (sensorAvailable?'Live sensor connected':deviceFresh?'Ultrasonic sensor unavailable':'Sensor offline · waiting for readings');
+ el('housePercent').textContent=sensorAvailable?Math.round(percent)+'%':'—';
+ el('level').textContent=sensorAvailable?Number(d.distanceCm).toFixed(1):'—';
+ el('height').textContent=sensorAvailable?Number(d.waterHeightCm).toFixed(1)+' centimeters':'—';
+ el('distance').textContent=sensorAvailable?Math.round(percent)+'%':'—';
+ el('houseIllustration').setAttribute('aria-label',sensorAvailable?
+  (preview?'Sample preview, not live data. ':'')+'Tank level '+Math.round(percent)+' percent. Ultrasonic distance '+Number(d.distanceCm).toFixed(1)+' centimeters. Flood status '+status+'.':
+  'Live tank level unavailable. '+(deviceFresh?'Ultrasonic sensor is not reporting a valid reading.':'Sensor is offline.'));
+ updateHouseWater(percent);
+}
 const offlineBeforeClearingReadings=offline;
 offline=function(){
  offlineBeforeClearingReadings();
+ updateLevelCard(null,false);
  samples.length=0;lastStatus=null;lastLedState=null;
  el('powerToggleState').textContent='—';el('powerSourceToggle').setAttribute('aria-pressed','false');
  el('buzzerToggleState').textContent='—';el('buzzerToggleBtn').setAttribute('aria-pressed','false');
@@ -2353,6 +2553,7 @@ offline=function(){
 };
 function offline(){el('linkDot').classList.remove('on');el('linkDot').classList.add('offline');el('linkDot').setAttribute('aria-label','Not connected');el('updated').textContent=cloudDashboard?'Waiting for device':'Connection lost';el('mainStatus').textContent=cloudDashboard?'Waiting for device':'No readings';el('mainStatus').className='status-title offline';el('mainDescription').textContent=cloudDashboard?'Waiting for the first ESP32 reading. Connect the device to its router Wi-Fi and keep it powered on.':'Connect your phone to the S.E.C.U.R.E network and open 192.168.4.1.';el('condition').textContent=cloudDashboard?'No cloud readings received yet':'Water level is not available';el('ultraHealth').textContent='No reading';el('heightCard').textContent='—';el('level').textContent='—';el('height').textContent='—';el('distance').textContent='—';el('distanceCard').textContent='—';el('alertLevel').textContent='—';el('buzzer').textContent='—';el('buzzerMode').textContent='—';el('changeAlerts').textContent='—';el('changeDelta').textContent='—';el('changeCount').textContent='—';el('clients').textContent='—';el('uptime').textContent='—';setLED('ledGreen',false);setLED('ledYellow',false);setLED('ledRed',false);el('monitorLoadLed').textContent='—';el('powerSourceToggle').disabled=true;}
 function render(d){const receivedAt=cloudDashboard?Date.parse(d.receivedAt):Date.now();const age=Date.now()-receivedAt;const deviceFresh=!cloudDashboard||(Number.isFinite(receivedAt)&&age>=-30000&&age<90000);el('linkDot').classList.toggle('on',deviceFresh);el('linkDot').classList.toggle('offline',!deviceFresh);el('linkDot').setAttribute('aria-label',cloudDashboard?(deviceFresh?'Device online':'Device offline'):(preview?'Sample readings':'Connected'));el('updated').textContent=cloudDashboard?'Last cloud update: '+new Date(Math.min(receivedAt,Date.now())).toLocaleTimeString():(preview?'Updated ':'Updated ')+new Date().toLocaleTimeString();
+ updateLevelCard(d,deviceFresh);
  const previousStatus=lastStatus;
  lastTelemetryReceivedAt=Number.isFinite(receivedAt)?receivedAt:0;
  if(cloudDashboard&&remoteCommandId&&d.commandAck===remoteCommandId){const confirmedAction=remoteCommandAction;clearTimeout(remoteCommandTimer);remoteCommandId='';remoteCommandAction='';el('powerToggleMessage').textContent='Power Source indicator is '+confirmedAction+'.';}
@@ -2381,8 +2582,8 @@ function render(d){const receivedAt=cloudDashboard?Date.parse(d.receivedAt):Date
  }
 const messages={safe:['Water is safe','The water is 11 centimeters or more below the device.'],warning:['Water is rising','The water is 7 to less than 11 centimeters below the device.'],critical:['Water is too high','The water is less than 7 centimeters below the device.'],fault:['No water reading','Check that the water reader is connected and dry.']};
 const [heading,desc]=messages[d.status]||messages.fault;el('mainStatus').textContent=heading;el('mainStatus').className='status-title '+(d.status||'fault');el('mainDescription').textContent=desc;el('condition').textContent=!d.ultrasonicOk?'No water reading':'Water is '+Number(d.distanceCm).toFixed(1)+' centimeters below the device';
-el('level').textContent=d.ultrasonicOk?Number(d.distanceCm).toFixed(1):'—';el('levelNote').textContent='Smaller numbers mean the water is closer. Water level is estimated against the tank baseline.';
-el('height').textContent=d.ultrasonicOk?Number(d.waterHeightCm).toFixed(1)+' centimeters':'No reading';el('distance').textContent=d.ultrasonicOk?Math.round(d.levelPercent)+'%':'No reading';el('distanceCard').textContent=d.ultrasonicOk?Number(d.distanceCm).toFixed(1)+' centimeters':'No reading';el('ultraHealth').textContent=d.ultrasonicOk?'Working':'No reading';el('heightCard').textContent=d.ultrasonicOk?Number(d.waterHeightCm).toFixed(1)+' centimeters':'No reading';el('alertLevel').textContent=simpleStatus(d.status);
+el('levelNote').textContent='Smaller numbers mean the water is closer. Water level is estimated against the tank baseline.';
+el('distanceCard').textContent=d.ultrasonicOk?Number(d.distanceCm).toFixed(1)+' centimeters':'No reading';el('ultraHealth').textContent=d.ultrasonicOk?'Working':'No reading';el('heightCard').textContent=d.ultrasonicOk?Number(d.waterHeightCm).toFixed(1)+' centimeters':'No reading';el('alertLevel').textContent=simpleStatus(d.status);
 setLED('ledGreen',d.green);setLED('ledYellow',d.yellow);setLED('ledRed',d.red);el('buzzer').textContent=d.buzzer?'On':'Off';el('buzzer').className=d.buzzer?'alarm':'';el('buzzerMode').textContent=d.buzzerType==='passive'?'Needs the device to make sound':'Makes its own sound';el('changeAlerts').textContent=Number(d.changeAlertCm).toFixed(1)+' centimeters';el('changeDelta').textContent=d.lastAlertDeltaCm>=0?Number(d.lastAlertDeltaCm).toFixed(1)+' centimeters · '+(d.lastAlertDirection==='Rising water'?'Water going up':'Water going down'):'Waiting for a change';el('changeCount').textContent=d.distanceChangeAlertCount||0;el('clients').textContent=d.clients;el('uptime').textContent=secs(d.uptime);
 if(!formLoaded){el('changeCm').value=d.changeAlertCm;el('driverMode').value=d.buzzerType;formLoaded=true}
 samples.push(d.ultrasonicOk?d.distanceCm:null);if(samples.length>60)samples.shift();draw();}
@@ -2546,6 +2747,6 @@ el('testBuzzerBtn').addEventListener('click',async()=>{
   }catch(e){message.className='message error';message.textContent='Could not test the alarm. Check the connections and try again.';}
   finally{button.disabled=false;}
 });
-window.addEventListener('resize',draw);load();startRealtime();if(cloudDashboard)checkRemoteControlSession();setInterval(load,1000);
+window.addEventListener('resize',()=>{updateHouseWater(currentWaterPercent);draw()});load();startRealtime();if(cloudDashboard)checkRemoteControlSession();setInterval(load,1000);
 </script>
 </body></html>
