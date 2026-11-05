@@ -2231,7 +2231,7 @@ document.querySelectorAll('.side-link').forEach(button=>button.addEventListener(
 let samples=[],formLoaded=false,polling=false,realtimeConnected=false,lastStatusCheckAt=0,previewTick=0,previewLedOn=false,lastStatus=null,lastLedState=null,lastBuzzerEnabled=true,lastTelemetryReceivedAt=0,toastTimer=0,toastHideTimer=0,notificationsReceived=0,lastNotification=null,notificationHistory=[],remoteControlAuthenticated=false,remoteControlConfigured=false,remoteControlAuthChecked=false,remoteCommandId='',remoteCommandAction='',remoteCommandTarget='led',remoteCommandTimer=0,pendingLoginAction='';
 const remoteLockButton=document.createElement('button');remoteLockButton.className='remote-lock-button';remoteLockButton.type='button';remoteLockButton.textContent='Lock';remoteLockButton.title='Lock remote control';remoteLockButton.hidden=true;el('powerSourceToggle').after(remoteLockButton);
 if(preview){el('previewBanner').style.display='block';el('powerSourceToggle').disabled=true;el('powerOffButton').disabled=true;el('powerOnButton').disabled=true;el('saveBtn').disabled=true;el('testBuzzerBtn').disabled=true;el('applyBuzzerModeBtn').disabled=true;el('saveMessage').textContent='Connect to the device to save this setting.';el('buzzerTestMessage').textContent='Connect to the device to test the alarm.';}
-if(cloudDashboard){['saveBtn','changeCm','testBuzzerBtn','applyBuzzerModeBtn','driverMode'].forEach(id=>el(id).disabled=true);el('appShell').querySelector('.sidebar-note').textContent='Remote GPIO23 indicator control requires the control password and an online ESP32.';document.querySelector('.stats-title span').textContent='Live readings update as received';el('powerToggleMessage').textContent='Remote control switches only the low-voltage GPIO23 indicator.';el('saveMessage').textContent='Settings can only be changed on the local device dashboard.';el('buzzerTestMessage').textContent='The alarm can only be tested on the local device dashboard.';}
+if(cloudDashboard){['testBuzzerBtn','applyBuzzerModeBtn','driverMode'].forEach(id=>el(id).disabled=true);el('saveBtn').disabled=true;el('appShell').querySelector('.sidebar-note').textContent='Remote GPIO23 indicator control requires the control password and an online ESP32.';document.querySelector('.stats-title span').textContent='Live readings update as received';el('powerToggleMessage').textContent='Remote control switches only the low-voltage GPIO23 indicator.';el('saveMessage').textContent='Connect to the ESP32 and unlock remote control to save this setting.';el('buzzerTestMessage').textContent='Alarm hardware choice and sound testing are available on the local device dashboard.';}
 if(preview||cloudDashboard)el('buzzerToggleBtn').disabled=true;
 function setLED(id,on){el(id).classList.toggle('on',!!on)}
 function playAlertSound(status){
@@ -2432,13 +2432,58 @@ async function sendBuzzerCommand(action){
   message.textContent='Could not change buzzer setting. Check the device connection and try again.';
  }finally{await load();}
 }
+async function saveChangeAlertSetting(){
+ if(preview)return;
+ const button=el('saveBtn'),message=el('saveMessage'),value=Number(el('changeCm').value);
+ if(!Number.isFinite(value)||value<0.5||value>20||!Number.isInteger(value*2)){
+  message.className='message error';message.textContent='Choose a value from 0.5 to 20 cm in 0.5 cm steps.';
+  return;
+ }
+ if(cloudDashboard&&!remoteDeviceOnline()){
+  message.className='message error';message.textContent='The ESP32 must be online to save this setting.';
+  return;
+ }
+ if(cloudDashboard&&!remoteControlAuthenticated){openControlLogin('setting:change-alert');return;}
+ button.disabled=true;message.className='message';message.textContent='Saving setting to the ESP32...';
+ try{
+  const response=await fetch(cloudDashboard?'/api/control':'/api/config',{
+   method:'POST',
+   headers:cloudDashboard?{'Content-Type':'application/json'}:{},
+   body:cloudDashboard?JSON.stringify({action:'set-change-alert',target:'settings',value}):new URLSearchParams({changeCm:String(value)}),
+   cache:'no-store',
+   credentials:cloudDashboard?'same-origin':'same-origin',
+  });
+  const result=await response.json();
+  if(response.status===401&&cloudDashboard){remoteControlAuthenticated=false;openControlLogin('setting:change-alert');return;}
+  if(!response.ok||!result.ok)throw Error(result.error||'The setting could not be saved.');
+  if(cloudDashboard){
+   remoteCommandId=result.commandId;remoteCommandAction='set-change-alert';remoteCommandTarget='settings';
+   message.textContent='Setting sent. Waiting for the ESP32 to confirm it was saved...';
+   remoteCommandTimer=setTimeout(()=>{
+    if(remoteCommandId){
+     remoteCommandId='';remoteCommandAction='';remoteCommandTarget='led';
+     message.className='message error';message.textContent='The ESP32 did not confirm the setting. Check that it is online and try again.';
+     load();
+    }
+   },35000);
+  }else{
+   message.className='message ok';message.textContent='Setting saved on the device.';
+   await load();
+  }
+ }catch(error){
+  message.className='message error';
+  message.textContent=error.message==='Failed to fetch'?'Could not reach the ESP32. Check its connection and try again.':error.message;
+ }finally{
+  button.disabled=preview||(cloudDashboard&&(!remoteDeviceOnline()||!!remoteCommandId));
+ }
+}
 function remoteDeviceOnline(){return !!lastStatus&&lastTelemetryReceivedAt>0&&Date.now()-lastTelemetryReceivedAt<90000}
 function openControlLogin(action=''){
  pendingLoginAction=action;
  const dialog=el('controlLoginDialog'),input=el('controlPassword');
  el('controlLoginError').textContent=remoteControlAuthChecked&&!remoteControlConfigured?'Remote control is not configured on the server yet.':'';
  el('controlLoginTitle').textContent=remoteControlAuthenticated?'Remote control unlocked':'Unlock remote control';
- el('controlLoginDescription').textContent=remoteControlAuthenticated?'This browser session is unlocked for up to eight hours. Lock it when you are finished.':'Enter your control password to switch the low-voltage GPIO23 indicator or buzzer. The ESP32 must be online.';
+ el('controlLoginDescription').textContent=remoteControlAuthenticated?'This browser session is unlocked for up to eight hours. Lock it when you are finished.':'Enter your control password to switch the low-voltage GPIO23 indicator or buzzer, or save device settings. The ESP32 must be online.';
  el('controlLoginForm').querySelector('[type="submit"]').hidden=remoteControlAuthenticated;
  input.hidden=remoteControlAuthenticated;
  input.required=!remoteControlAuthenticated;
@@ -2470,6 +2515,7 @@ el('controlLoginForm').addEventListener('submit',async event=>{
   const action=pendingLoginAction;pendingLoginAction='';
   el('controlLoginDialog').close();
   if(action?.startsWith('buzzer:'))await sendBuzzerCommand(action.slice(7));
+  else if(action==='setting:change-alert')await saveChangeAlertSetting();
   else if(action)await sendLedCommand(action);
  }catch(error){el('controlLoginError').textContent=error.message==='Incorrect control password.'?error.message:'Could not unlock remote control. Check that the service is configured and try again.';}
  finally{submit.disabled=false;}
@@ -2541,16 +2587,17 @@ offline=function(){
  }
  draw();
 };
-function offline(){el('linkDot').classList.remove('on');el('linkDot').classList.add('offline');el('linkDot').setAttribute('aria-label','Not connected');el('updated').textContent=cloudDashboard?'Waiting for device':'Connection lost';el('mainStatus').textContent=cloudDashboard?'Waiting for device':'No readings';el('mainStatus').className='status-title offline';el('mainDescription').textContent=cloudDashboard?'Waiting for the first ESP32 reading. Connect the device to its router Wi-Fi and keep it powered on.':'Connect your phone to the S.E.C.U.R.E network and open 192.168.4.1.';el('condition').textContent=cloudDashboard?'No cloud readings received yet':'Water level is not available';el('ultraHealth').textContent='No reading';el('heightCard').textContent='—';el('level').textContent='—';el('height').textContent='—';el('distance').textContent='—';el('distanceCard').textContent='—';el('alertLevel').textContent='—';el('buzzer').textContent='—';el('buzzerMode').textContent='—';el('changeAlerts').textContent='—';el('changeDelta').textContent='—';el('changeCount').textContent='—';el('clients').textContent='—';el('uptime').textContent='—';setLED('ledGreen',false);setLED('ledYellow',false);setLED('ledRed',false);el('monitorLoadLed').textContent='—';el('powerSourceToggle').disabled=true;}
+function offline(){el('linkDot').classList.remove('on');el('linkDot').classList.add('offline');el('linkDot').setAttribute('aria-label','Not connected');el('updated').textContent=cloudDashboard?'Waiting for device':'Connection lost';el('mainStatus').textContent=cloudDashboard?'Waiting for device':'No readings';el('mainStatus').className='status-title offline';el('mainDescription').textContent=cloudDashboard?'Waiting for the first ESP32 reading. Connect the device to its router Wi-Fi and keep it powered on.':'Connect your phone to the S.E.C.U.R.E network and open 192.168.4.1.';el('condition').textContent=cloudDashboard?'No cloud readings received yet':'Water level is not available';el('ultraHealth').textContent='No reading';el('heightCard').textContent='—';el('level').textContent='—';el('height').textContent='—';el('distance').textContent='—';el('distanceCard').textContent='—';el('alertLevel').textContent='—';el('buzzer').textContent='—';el('buzzerMode').textContent='—';el('changeAlerts').textContent='—';el('changeDelta').textContent='—';el('changeCount').textContent='—';el('clients').textContent='—';el('uptime').textContent='—';setLED('ledGreen',false);setLED('ledYellow',false);setLED('ledRed',false);el('monitorLoadLed').textContent='—';el('powerSourceToggle').disabled=true;el('saveBtn').disabled=true;}
 function render(d){const receivedAt=cloudDashboard?Date.parse(d.receivedAt):Date.now();const age=Date.now()-receivedAt;const deviceFresh=!cloudDashboard||(Number.isFinite(receivedAt)&&age>=-30000&&age<90000);el('linkDot').classList.toggle('on',deviceFresh);el('linkDot').classList.toggle('offline',!deviceFresh);el('linkDot').setAttribute('aria-label',cloudDashboard?(deviceFresh?'Device online':'Device offline'):(preview?'Sample readings':'Connected'));el('updated').textContent=cloudDashboard?'Last cloud update: '+new Date(Math.min(receivedAt,Date.now())).toLocaleTimeString():(preview?'Updated ':'Updated ')+new Date().toLocaleTimeString();
  updateLevelCard(d,deviceFresh);
  const previousStatus=lastStatus;
  lastTelemetryReceivedAt=Number.isFinite(receivedAt)?receivedAt:0;
- if(cloudDashboard&&remoteCommandId&&d.commandAck===remoteCommandId){const confirmedAction=remoteCommandAction;clearTimeout(remoteCommandTimer);remoteCommandId='';remoteCommandAction='';el('powerToggleMessage').textContent='Power Source indicator is '+confirmedAction+'.';}
+ if(cloudDashboard&&remoteCommandId&&d.commandAck===remoteCommandId){const confirmedAction=remoteCommandAction,confirmedTarget=remoteCommandTarget;clearTimeout(remoteCommandTimer);remoteCommandId='';remoteCommandAction='';remoteCommandTarget='led';if(confirmedTarget==='settings'){el('changeCm').value=Number(d.changeAlertCm).toFixed(1);el('saveMessage').className='message ok';el('saveMessage').textContent='Setting saved on the ESP32.';}else if(confirmedTarget==='buzzer'){el('buzzerToggleMessage').className='buzzer-toggle-message';el('buzzerToggleMessage').textContent=confirmedAction==='on'?'Buzzer enabled.':'Buzzer disabled.';}else{el('powerToggleMessage').textContent='Power Source indicator is '+confirmedAction+'.';}}
  if(!cloudDashboard||deviceFresh)notifyStatus(d.status,d.distanceCm);
  lastLedState=!!d.ledOn;
  el('monitorLoadLed').textContent=d.ledOn?'ON':'OFF';
  el('powerSourceToggle').disabled=preview||!deviceFresh||!!remoteCommandId;
+ el('saveBtn').disabled=preview||(cloudDashboard&&(!deviceFresh||!!remoteCommandId));
  el('powerSourceToggle').title=cloudDashboard?(remoteControlAuthenticated?'Switch the remote GPIO23 indicator':'Sign in to control the remote GPIO23 indicator'):'Switch the GPIO23 indicator';
  el('powerSourceToggle').setAttribute('aria-pressed',String(!!d.ledOn));
  el('powerSourceToggle').setAttribute('aria-label','Power Source is '+(d.ledOn?'on':'off')+'. Turn '+(d.ledOn?'off':'on')+'.');
@@ -2711,7 +2758,7 @@ async function startRealtime(){
   console.error('Could not start live telemetry. The dashboard will keep using status polling.',error);
  }
 }
-el('configForm').addEventListener('submit',async ev=>{ev.preventDefault();if(preview||cloudDashboard)return;const btn=el('saveBtn'),message=el('saveMessage');btn.disabled=true;message.textContent='Saving...';message.className='message';try{const data=new URLSearchParams(new FormData(ev.target));const r=await fetch('/api/config',{method:'POST',body:data});const j=await r.json();if(!r.ok||!j.ok)throw Error(j.error||'The setting could not be saved');message.textContent='Setting saved.';message.className='message ok';await load()}catch(e){message.textContent='Could not save. Check the connection and try again.';message.className='message error'}finally{btn.disabled=false}});
+el('configForm').addEventListener('submit',async ev=>{ev.preventDefault();await saveChangeAlertSetting()});
 el('applyBuzzerModeBtn').addEventListener('click',async()=>{
   if(preview||cloudDashboard)return;
   const btn=el('applyBuzzerModeBtn'),message=el('buzzerTestMessage');btn.disabled=true;

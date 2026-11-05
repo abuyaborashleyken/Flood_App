@@ -22,12 +22,22 @@ export default async function handler(req, res) {
     return res.status(401).json({ ok: false, error: "Sign in to control the device." });
   }
 
-  const { action, target = "led" } = req.body ?? {};
-  if (action !== "on" && action !== "off") {
-    return res.status(400).json({ ok: false, error: "Action must be on or off." });
-  }
-  if (target !== "led" && target !== "buzzer") {
-    return res.status(400).json({ ok: false, error: "Target must be led or buzzer." });
+  const { action, target = "led", value } = req.body ?? {};
+  const controlCommand = ["on", "off"].includes(action) &&
+    ["led", "buzzer"].includes(target) &&
+    value === undefined;
+  const settingsCommand = action === "set-change-alert" &&
+    target === "settings" &&
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0.5 &&
+    value <= 20 &&
+    Number.isInteger(value * 2);
+  if (!controlCommand && !settingsCommand) {
+    return res.status(400).json({
+      ok: false,
+      error: "Choose a valid device command or a change-alert setting from 0.5 to 20 cm in 0.5 cm steps.",
+    });
   }
 
   const createdAt = new Date();
@@ -35,13 +45,19 @@ export default async function handler(req, res) {
     id: randomUUID(),
     action,
     target,
+    value: settingsCommand ? value : null,
     createdAt: createdAt.toISOString(),
     expiresAt: createdAt.getTime() + 30_000,
   };
 
   try {
     await queueControlCommand(command);
-    return res.status(202).json({ ok: true, commandId: command.id, target });
+    return res.status(202).json({
+      ok: true,
+      commandId: command.id,
+      target,
+      ...(settingsCommand ? { value } : {}),
+    });
   } catch (error) {
     console.error("Could not queue AquaGuard remote control command.", error);
     return res.status(503).json({ ok: false, error: "Could not queue the command." });

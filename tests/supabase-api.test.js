@@ -313,6 +313,45 @@ test("telemetry remains accepted when the optional realtime broadcast fails", as
   }
 });
 
+test("telemetry API returns a pending change-alert setting to the ESP32", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const commandId = "123e4567-e89b-42d3-a456-426614174000";
+  const supabase = mockSupabase(url => url.pathname.endsWith("/secure_control_command")
+    ? {
+      body: JSON.stringify([{
+        command_id: commandId,
+        action: "set-change-alert",
+        target: "settings",
+        value: 3,
+        expires_at: new Date(Date.now() + 30_000).toISOString(),
+      }]),
+    }
+    : { status: 201 });
+  try {
+    const response = createResponse();
+    await telemetryHandler({
+      method: "POST",
+      headers: { authorization: `Bearer ${process.env.AQUAGUARD_DEVICE_TOKEN}` },
+      body: validTelemetry,
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body.command, {
+      id: commandId,
+      action: "set-change-alert",
+      target: "settings",
+      value: 3,
+    });
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
 test("telemetry acknowledgement deletes only the matching Supabase command", async () => {
   const restoreEnvironment = setEnvironment({
     AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
@@ -405,6 +444,73 @@ test("control API queues a buzzer command for the signed-in device", async () =>
     const queued = JSON.parse(supabase.requests[0].init.body)[0];
     assert.equal(queued.action, "off");
     assert.equal(queued.target, "buzzer");
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
+test("control API queues a validated change-alert setting for the signed-in device", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_CONTROL_PASSWORD: controlPassword,
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const supabase = mockSupabase(() => ({ status: 201 }));
+  try {
+    const session = createControlSession(controlPassword);
+    const response = createResponse();
+    await controlHandler({
+      method: "POST",
+      headers: {
+        origin: "https://secure-app-live.vercel.app",
+        host: "secure-app-live.vercel.app",
+        cookie: `__Secure-aquaguard_control=${session.value}`,
+      },
+      body: { action: "set-change-alert", target: "settings", value: 3 },
+    }, response);
+
+    assert.equal(response.statusCode, 202);
+    assert.deepEqual(response.body, {
+      ok: true,
+      commandId: response.body.commandId,
+      target: "settings",
+      value: 3,
+    });
+    assert.match(response.body.commandId, /^[0-9a-f-]{36}$/i);
+    const queued = JSON.parse(supabase.requests[0].init.body)[0];
+    assert.equal(queued.action, "set-change-alert");
+    assert.equal(queued.target, "settings");
+    assert.equal(queued.value, 3);
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
+test("control API rejects out-of-range or fractional-step change-alert settings", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_CONTROL_PASSWORD: controlPassword,
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const supabase = mockSupabase(() => ({ status: 201 }));
+  try {
+    const session = createControlSession(controlPassword);
+    for (const value of [0.4, 20.5, 1.25, "3"]) {
+      const response = createResponse();
+      await controlHandler({
+        method: "POST",
+        headers: {
+          origin: "https://secure-app-live.vercel.app",
+          host: "secure-app-live.vercel.app",
+          cookie: `__Secure-aquaguard_control=${session.value}`,
+        },
+        body: { action: "set-change-alert", target: "settings", value },
+      }, response);
+      assert.equal(response.statusCode, 400);
+    }
+    assert.equal(supabase.requests.length, 0);
   } finally {
     supabase.restore();
     restoreEnvironment();

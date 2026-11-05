@@ -16,6 +16,7 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 #include <esp_arduino_version.h>
+#include <stdlib.h>
 
 #if __has_include("secrets.h")
 #include "secrets.h"
@@ -2011,6 +2012,25 @@ String cloudJsonStringField(const String &json, const char *field, int startAt =
   return json.substring(contentStart, valueEnd);
 }
 
+bool cloudJsonFloatField(const String &json, const char *field, float &value, int startAt = 0) {
+  const String marker = String("\"") + field + "\":";
+  const int valueStart = json.indexOf(marker, startAt);
+  if (valueStart < 0) return false;
+  const int contentStart = valueStart + marker.length();
+  int valueEnd = json.indexOf(',', contentStart);
+  const int objectEnd = json.indexOf('}', contentStart);
+  if (valueEnd < 0 || (objectEnd >= 0 && objectEnd < valueEnd)) valueEnd = objectEnd;
+  if (valueEnd < 0) return false;
+
+  String encoded = json.substring(contentStart, valueEnd);
+  encoded.trim();
+  char *end = nullptr;
+  const float parsed = strtof(encoded.c_str(), &end);
+  if (end == encoded.c_str() || *end != '\0' || !isfinite(parsed)) return false;
+  value = parsed;
+  return true;
+}
+
 void applyCloudControlCommand(const String &responseBody) {
   const int commandStart = responseBody.indexOf("\"command\":{");
   if (commandStart < 0) return;
@@ -2018,22 +2038,37 @@ void applyCloudControlCommand(const String &responseBody) {
   const String commandId = cloudJsonStringField(responseBody, "id", commandStart);
   const String action = cloudJsonStringField(responseBody, "action", commandStart);
   const String target = cloudJsonStringField(responseBody, "target", commandStart);
-  if (commandId.length() != 36 || (action != "on" && action != "off")) return;
+  if (commandId.length() != 36) return;
   if (prefs.getString("commandAck", "") == commandId) return;
 
-  const bool turnOn = action == "on";
-  if (target == "buzzer") {
-    buzzerEnabled = turnOn;
-    prefs.putBool("buzzerEnabled", buzzerEnabled);
-    updateOutputs();
+  if (action == "set-change-alert" && target == "settings") {
+    float requested = 0.0f;
+    if (!cloudJsonFloatField(responseBody, "value", requested, commandStart) ||
+        requested < 0.5f || requested > 20.0f || requested * 2.0f != roundf(requested * 2.0f)) {
+      return;
+    }
+    changeAlertCm = requested;
+    lastChangeReferenceCm = -1.0f;
+    prefs.putFloat("changeCm", changeAlertCm);
+    Serial.printf("Cloud setting saved: log water changes at %.1f cm or greater\n", changeAlertCm);
   } else {
-    loadLedAutoOffLatched = !turnOn;
-    setLoadLed(turnOn);
+    if ((action != "on" && action != "off") || (target != "led" && target != "buzzer")) return;
+    const bool turnOn = action == "on";
+    if (target == "buzzer") {
+      buzzerEnabled = turnOn;
+      prefs.putBool("buzzerEnabled", buzzerEnabled);
+      updateOutputs();
+    } else {
+      loadLedAutoOffLatched = !turnOn;
+      setLoadLed(turnOn);
+    }
   }
   prefs.putString("commandAck", commandId);
-  Serial.printf("Cloud control command %s acknowledged: %s %s\n",
-                commandId.c_str(), target == "buzzer" ? "buzzer" : "GPIO23",
-                turnOn ? "ON" : "OFF");
+  if (target != "settings") {
+    Serial.printf("Cloud control command %s acknowledged: %s %s\n",
+                  commandId.c_str(), target == "buzzer" ? "buzzer" : "GPIO23",
+                  action == "on" ? "ON" : "OFF");
+  }
 }
 
 void cloudTelemetryTask(void *parameter) {

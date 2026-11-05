@@ -34,10 +34,11 @@ remote-control password to change this setting.
 The control password must be configured as the Vercel environment variable
 `AQUAGUARD_CONTROL_PASSWORD` and must be at least 16 characters. The browser
 session expires after eight hours; use the **Lock** button to end it sooner.
-On the live dashboard, click the **Power Source** indicator and enter this
-password to unlock remote control. The cloud dashboard cannot switch a pump,
-mains circuit, or other power supply. Wi-Fi and cloud latency mean readings
-are near-real-time, not instantaneous.
+On the live dashboard, click **Power Source** or save the water-change
+sensitivity setting and enter this password to unlock remote control. Settings
+are saved to the ESP32 only after it confirms the command. The cloud dashboard
+cannot switch a pump, mains circuit, or other power supply. Wi-Fi and cloud
+latency mean readings are near-real-time, not instantaneous.
 
 ## S.E.C.U.R.E APPLICATION deployment
 
@@ -62,7 +63,10 @@ read-only Realtime WebSocket client; it is not a service-role key.
    to enable authenticated remote buzzer control, and
    `supabase/migrations/20261105000000_allow_secure_telemetry_realtime.sql`
    to authorize read-only dashboard subscriptions to the private telemetry
-   broadcast channel. In Supabase **Realtime settings**, disable **Allow public
+   broadcast channel, and
+   `supabase/migrations/20261106000000_allow_remote_change_alert_setting.sql`
+   to allow authenticated remote saving of the water-change sensitivity. In
+   Supabase **Realtime settings**, disable **Allow public
    access** so broadcast access is controlled by this policy.
    The tables have row-level security enabled; only the Vercel server uses the
    service-role key, which must never be exposed in browser code.
@@ -78,7 +82,9 @@ token, saves each reading, and broadcasts it immediately to connected
 dashboards. The dashboard falls back to one-second status polling if Realtime
 is unavailable and checks device connectivity every ten seconds while the
 push connection is healthy. No hardware protocol change or additional firmware
-secret is needed for this backend swap.
+secret is needed for this backend swap. Upload the current ESP32 sketch to enable
+the cloud dashboard's authenticated water-change sensitivity setting; the
+device persists the setting and confirms it through its next telemetry update.
 ### Enable realtime delivery
 
 The dashboard subscribes to Supabase Realtime broadcasts and keeps the one-second

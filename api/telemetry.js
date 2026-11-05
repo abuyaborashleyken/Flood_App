@@ -42,11 +42,20 @@ export default async function handler(req, res) {
     const [command] = await Promise.all([readPendingCommand(), broadcastPromise]);
     if (!command) return res.status(200).json({ ok: true });
 
+    const controlCommand = ["on", "off"].includes(command.action) &&
+      ["led", "buzzer"].includes(command.target) &&
+      command.value == null;
+    const settingsCommand = command.action === "set-change-alert" &&
+      command.target === "settings" &&
+      Number.isFinite(command.value) &&
+      command.value >= 0.5 &&
+      command.value <= 20 &&
+      Number.isInteger(command.value * 2);
     if (
       typeof command.id !== "string" ||
       typeof command.action !== "string" ||
-      !["on", "off"].includes(command.action) ||
-      !["led", "buzzer"].includes(command.target) ||
+      typeof command.target !== "string" ||
+      (!controlCommand && !settingsCommand) ||
       !Number.isFinite(command.expiresAt)
     ) {
       console.error("Discarding malformed AquaGuard remote control command.");
@@ -61,7 +70,12 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      command: { id: command.id, action: command.action, target: command.target },
+      command: {
+        id: command.id,
+        action: command.action,
+        target: command.target,
+        ...(settingsCommand ? { value: command.value } : {}),
+      },
     });
   } catch (error) {
     console.error("Could not save telemetry or read a pending command.", error);
