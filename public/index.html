@@ -735,16 +735,16 @@ h1{
   transform:translateY(calc(-1 * var(--water-rise,0px)));
   transition:transform 1.1s cubic-bezier(.22,.75,.25,1),opacity .35s ease;
 }
-.house-water-wave{
-  fill:var(--level-color);
-}
+.house-water-wave{transition:fill .2s ease}
 .house-water-wave.back{
-  opacity:.3;
-  animation:water-drift 5s linear infinite;
+  fill:#38bdf8;
+  opacity:.76;
+  animation:water-drift 4.8s linear infinite;
 }
 .house-water-wave.front{
-  opacity:.78;
-  animation:water-drift 3.8s linear infinite reverse;
+  fill:#0284c7;
+  opacity:.9;
+  animation:water-drift 3.6s linear infinite reverse;
 }
 @keyframes water-drift{
   to{transform:translateX(-12px)}
@@ -765,7 +765,7 @@ h1{
   text-shadow:0 1px 3px rgba(255,255,255,.7);
   transition:color .35s ease,text-shadow .35s ease;
 }
-.house-illustration[data-water-behind="true"][data-water-text-light="true"] .house-reading strong{
+.house-illustration[data-water-behind="true"] .house-reading strong{
   color:#fff;
   text-shadow:0 1px 5px rgba(15,23,42,.65);
 }
@@ -2011,10 +2011,12 @@ dialog::backdrop{
                   </clipPath>
                 </defs>
                 <path d="M60 101 140 30l80 71v119H60z" fill="#fff" stroke="#cbd5e1" stroke-width="3" stroke-linejoin="round"/>
-                <g transform="translate(0 214)" clip-path="url(#houseWaterClip)">
+                <g clip-path="url(#houseWaterClip)">
                   <g class="house-water-layer" id="waterLayer" style="--water-rise:0px">
+                    <g transform="translate(0 210)">
                     <path class="house-water-wave back" d="M-40 4C-20-3 0-3 20 4s40 7 60 0 40-7 60 0 40 7 60 0 40-7 60 0 40 7 60 0 40-7 60 0v260H-40z"/>
                     <path class="house-water-wave front" d="M-40 6c20 7 40 7 60 0s40-7 60 0 40 7 60 0 40-7 60 0 40 7 60 0 40-7 60 0v260H-40z"/>
+                    </g>
                   </g>
                 </g>
                 <path d="M36 105 140 22l104 83M60 98v122h160V98" fill="none" stroke="#334155" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2490,15 +2492,12 @@ updateClock();setInterval(updateClock,1000);
 let currentWaterPercent=0;
 function updateHouseWater(percent){
  currentWaterPercent=percent;
- const bounds=el('houseIllustration').getBoundingClientRect();
- const scale=Math.min(bounds.width/280,bounds.height/250);
- const rise=scale*184*percent/100;
+ const rise=176*percent/100;
  const waterLayer=el('waterLayer');
  waterLayer.style.setProperty('--water-rise',rise+'px');
  waterLayer.style.opacity=percent===0?'0':'1';
  const illustration=el('houseIllustration');
  illustration.dataset.waterBehind=String(percent>=43);
- illustration.dataset.waterTextLight=String(percent>=43&&el('levelCard').dataset.levelStatus==='critical');
 }
 function updateLevelCard(d,deviceFresh){
  const sensorAvailable=!!deviceFresh&&d?.ultrasonicOk===true&&
