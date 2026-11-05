@@ -720,7 +720,7 @@ h1{
   position:relative;
   width:100%;
   max-width:220px;
-  aspect-ratio:1 / .94;
+  aspect-ratio:280 / 250;
   justify-self:center;
   overflow:hidden;
   border-radius:20px;
@@ -751,32 +751,23 @@ h1{
 }
 .house-reading{
   position:absolute;
-  top:65%;
+  top:55%;
   left:50%;
-  display:grid;
-  justify-items:center;
-  min-width:76px;
-  padding:5px 10px 6px;
-  border:1px solid rgba(255,255,255,.9);
-  border-radius:12px;
-  background:rgba(255,255,255,.86);
-  box-shadow:0 2px 8px rgba(15,23,42,.1);
   transform:translate(-50%,-50%);
   pointer-events:none;
 }
 .house-reading strong{
-  color:var(--level-color);
+  color:#0f172a;
   font-family:var(--font-mono);
   font-size:clamp(22px,3vw,30px);
   font-weight:900;
   line-height:1.05;
+  text-shadow:0 1px 3px rgba(255,255,255,.7);
+  transition:color .35s ease,text-shadow .35s ease;
 }
-.house-reading span{
-  color:var(--ink-muted);
-  font-size:9px;
-  font-weight:800;
-  letter-spacing:.65px;
-  text-transform:uppercase;
+.house-illustration[data-water-behind="true"][data-water-text-light="true"] .house-reading strong{
+  color:#fff;
+  text-shadow:0 1px 5px rgba(15,23,42,.65);
 }
 .level-readings{
   display:grid;
@@ -1801,7 +1792,6 @@ dialog::backdrop{
   .config-grid{grid-template-columns:1fr}
   .level-card{padding:16px}
   .level-display{grid-template-columns:minmax(112px,.9fr) minmax(0,1fr);gap:6px}
-  .house-reading{min-width:66px;padding:5px 8px}
   .level-distance-value strong{font-size:clamp(28px,8vw,36px)}
   .power-dialog,.history-dialog{
     inset:68px 10px auto;
@@ -2017,22 +2007,20 @@ dialog::backdrop{
               <svg viewBox="0 0 280 250" aria-hidden="true">
                 <defs>
                   <clipPath id="houseWaterClip">
-                    <rect x="68" y="106" width="144" height="110" rx="2"/>
+                    <path d="M66 103 140 44l74 59v111H66z"/>
                   </clipPath>
                 </defs>
                 <path d="M60 101 140 30l80 71v119H60z" fill="#fff" stroke="#cbd5e1" stroke-width="3" stroke-linejoin="round"/>
-                <g transform="translate(0 212)" clip-path="url(#houseWaterClip)">
+                <g transform="translate(0 214)" clip-path="url(#houseWaterClip)">
                   <g class="house-water-layer" id="waterLayer" style="--water-rise:0px">
-                    <path class="house-water-wave back" d="M40 4C60-3 80-3 100 4s40 7 60 0 40-7 60 0 40 7 60 0v120H40z"/>
-                    <path class="house-water-wave front" d="M40 6c20 7 40 7 60 0s40-7 60 0 40 7 60 0 40-7 60 0v120H40z"/>
+                    <path class="house-water-wave back" d="M-40 4C-20-3 0-3 20 4s40 7 60 0 40-7 60 0 40 7 60 0 40-7 60 0 40 7 60 0 40-7 60 0v260H-40z"/>
+                    <path class="house-water-wave front" d="M-40 6c20 7 40 7 60 0s40-7 60 0 40 7 60 0 40-7 60 0 40 7 60 0 40-7 60 0v260H-40z"/>
                   </g>
                 </g>
                 <path d="M36 105 140 22l104 83M60 98v122h160V98" fill="none" stroke="#334155" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M74 116h132v96H74z" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linejoin="round"/>
               </svg>
               <div class="house-reading">
                 <strong id="housePercent">—</strong>
-                <span>tank level</span>
               </div>
             </div>
             <div class="level-readings">
@@ -2504,10 +2492,13 @@ function updateHouseWater(percent){
  currentWaterPercent=percent;
  const bounds=el('houseIllustration').getBoundingClientRect();
  const scale=Math.min(bounds.width/280,bounds.height/250);
- const rise=scale*110*percent/100;
+ const rise=scale*184*percent/100;
  const waterLayer=el('waterLayer');
  waterLayer.style.setProperty('--water-rise',rise+'px');
  waterLayer.style.opacity=percent===0?'0':'1';
+ const illustration=el('houseIllustration');
+ illustration.dataset.waterBehind=String(percent>=43);
+ illustration.dataset.waterTextLight=String(percent>=43&&el('levelCard').dataset.levelStatus==='critical');
 }
 function updateLevelCard(d,deviceFresh){
  const sensorAvailable=!!deviceFresh&&d?.ultrasonicOk===true&&
