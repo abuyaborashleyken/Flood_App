@@ -22,22 +22,26 @@ export default async function handler(req, res) {
     return res.status(401).json({ ok: false, error: "Sign in to control the device." });
   }
 
-  const { action } = req.body ?? {};
+  const { action, target = "led" } = req.body ?? {};
   if (action !== "on" && action !== "off") {
     return res.status(400).json({ ok: false, error: "Action must be on or off." });
+  }
+  if (target !== "led" && target !== "buzzer") {
+    return res.status(400).json({ ok: false, error: "Target must be led or buzzer." });
   }
 
   const createdAt = new Date();
   const command = {
     id: randomUUID(),
     action,
+    target,
     createdAt: createdAt.toISOString(),
     expiresAt: createdAt.getTime() + 30_000,
   };
 
   try {
     await queueControlCommand(command);
-    return res.status(202).json({ ok: true, commandId: command.id });
+    return res.status(202).json({ ok: true, commandId: command.id, target });
   } catch (error) {
     console.error("Could not queue AquaGuard remote control command.", error);
     return res.status(503).json({ ok: false, error: "Could not queue the command." });

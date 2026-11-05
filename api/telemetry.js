@@ -46,6 +46,7 @@ export default async function handler(req, res) {
       typeof command.id !== "string" ||
       typeof command.action !== "string" ||
       !["on", "off"].includes(command.action) ||
+      !["led", "buzzer"].includes(command.target) ||
       !Number.isFinite(command.expiresAt)
     ) {
       console.error("Discarding malformed AquaGuard remote control command.");
@@ -60,7 +61,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      command: { id: command.id, action: command.action },
+      command: { id: command.id, action: command.action, target: command.target },
     });
   } catch (error) {
     console.error("Could not save telemetry or read a pending command.", error);

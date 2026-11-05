@@ -20,6 +20,7 @@ const validTelemetry = {
   yellow: false,
   red: false,
   buzzer: false,
+  buzzerEnabled: true,
   buzzerMode: "Active HIGH",
   buzzerType: "active",
   buzzerTest: false,
@@ -229,6 +230,57 @@ test("telemetry API broadcasts accepted readings to private Realtime", async () 
   }
 });
 
+test("telemetry API saves hardware readings and returns a pending device command", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+    SUPABASE_ANON_KEY: "test-publishable-key",
+  });
+  const commandId = "123e4567-e89b-42d3-a456-426614174000";
+  const supabase = mockSupabase(url => {
+    if (url.pathname.endsWith("/secure_control_command")) {
+      return {
+        body: JSON.stringify([{
+          command_id: commandId,
+          action: "off",
+          target: "buzzer",
+          expires_at: new Date(Date.now() + 30_000).toISOString(),
+        }]),
+      };
+    }
+    return { status: 201 };
+  });
+  try {
+    const response = createResponse();
+    await telemetryHandler({
+      method: "POST",
+      headers: { authorization: "Bearer a-valid-device-token" },
+      body: validTelemetry,
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body.command, { id: commandId, action: "off", target: "buzzer" });
+    assert.equal(supabase.requests[0].url.pathname, "/rest/v1/secure_telemetry");
+    assert.equal(supabase.requests[0].init.method, "POST");
+    const broadcast = supabase.requests.find(request =>
+      request.url.pathname === "/realtime/v1/api/broadcast/secure-telemetry/events/reading"
+    );
+    assert.ok(broadcast);
+    assert.equal(broadcast.url.searchParams.get("private"), "true");
+    assert.equal(broadcast.init.headers.apikey, serviceKey);
+    assert.deepEqual(JSON.parse(broadcast.init.body), {
+      telemetry: { ...validTelemetry, receivedAt: JSON.parse(broadcast.init.body).telemetry.receivedAt },
+    });
+    assert.ok(supabase.requests.some(request =>
+      request.url.pathname === "/rest/v1/secure_control_command"
+    ));
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
 test("telemetry remains accepted when the optional realtime broadcast fails", async () => {
   const restoreEnvironment = setEnvironment({
     AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
@@ -248,7 +300,7 @@ test("telemetry remains accepted when the optional realtime broadcast fails", as
     const response = createResponse();
     await telemetryHandler({
       method: "POST",
-      headers: { authorization: "Bearer a-valid-device-token" },
+      headers: { authorization: ["Bearer", "a-valid-device-token"].join(" ") },
       body: validTelemetry,
     }, response);
 
@@ -256,43 +308,6 @@ test("telemetry remains accepted when the optional realtime broadcast fails", as
     assert.match(errors[0], /Could not broadcast the latest telemetry/);
   } finally {
     console.error = originalConsoleError;
-    supabase.restore();
-    restoreEnvironment();
-  }
-});
-test("telemetry API saves hardware readings and returns a pending device command", async () => {
-  const restoreEnvironment = setEnvironment({
-    AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
-    SUPABASE_URL: serviceUrl,
-    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
-  });
-  const commandId = "123e4567-e89b-42d3-a456-426614174000";
-  const supabase = mockSupabase(url => {
-    if (url.pathname.endsWith("/secure_control_command")) {
-      return {
-        body: JSON.stringify([{
-          command_id: commandId,
-          action: "off",
-          expires_at: new Date(Date.now() + 30_000).toISOString(),
-        }]),
-      };
-    }
-    return { status: 201 };
-  });
-  try {
-    const response = createResponse();
-    await telemetryHandler({
-      method: "POST",
-      headers: { authorization: "Bearer a-valid-device-token" },
-      body: validTelemetry,
-    }, response);
-
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.body.command, { id: commandId, action: "off" });
-    assert.equal(supabase.requests[0].url.pathname, "/rest/v1/secure_telemetry");
-    assert.equal(supabase.requests[0].init.method, "POST");
-    assert.equal(supabase.requests[1].url.pathname, "/rest/v1/secure_control_command");
-  } finally {
     supabase.restore();
     restoreEnvironment();
   }
@@ -356,8 +371,40 @@ test("control API queues a signed-in command in Supabase", async () => {
     assert.equal(response.body.ok, true);
     const queued = JSON.parse(supabase.requests[0].init.body)[0];
     assert.equal(queued.action, "on");
+    assert.equal(queued.target, "led");
     assert.equal(queued.singleton, true);
     assert.equal(queued.command_id, response.body.commandId);
+  } finally {
+    supabase.restore();
+    restoreEnvironment();
+  }
+});
+
+test("control API queues a buzzer command for the signed-in device", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_CONTROL_PASSWORD: controlPassword,
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const supabase = mockSupabase(() => ({ status: 201 }));
+  try {
+    const session = createControlSession(controlPassword);
+    const response = createResponse();
+    await controlHandler({
+      method: "POST",
+      headers: {
+        origin: "https://secure-app-live.vercel.app",
+        host: "secure-app-live.vercel.app",
+        cookie: `__Secure-aquaguard_control=${session.value}`,
+      },
+      body: { action: "off", target: "buzzer" },
+    }, response);
+
+    assert.equal(response.statusCode, 202);
+    assert.equal(response.body.target, "buzzer");
+    const queued = JSON.parse(supabase.requests[0].init.body)[0];
+    assert.equal(queued.action, "off");
+    assert.equal(queued.target, "buzzer");
   } finally {
     supabase.restore();
     restoreEnvironment();
@@ -384,6 +431,43 @@ test("missing Supabase configuration fails explicitly instead of returning empty
     else process.env.SUPABASE_URL = previousUrl;
     if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+    restoreEnvironment();
+  }
+});
+
+test("telemetry API includes safe PostgREST diagnostics when command reads fail", async () => {
+  const restoreEnvironment = setEnvironment({
+    AQUAGUARD_DEVICE_TOKEN: "a-valid-device-token",
+    SUPABASE_URL: serviceUrl,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  });
+  const supabase = mockSupabase(url => url.pathname.endsWith("/secure_control_command")
+    ? {
+      status: 400,
+      body: JSON.stringify({
+        code: "PGRST204",
+        message: "Could not find the target column.",
+        details: "Sensitive row detail",
+      }),
+    }
+    : { status: 201 });
+  const originalConsoleError = console.error;
+  const errors = [];
+  console.error = (...args) => errors.push(args.join(" "));
+  try {
+    const response = createResponse();
+    await telemetryHandler({
+      method: "POST",
+      headers: { authorization: `Bearer ${"a-valid-device-token"}` },
+      body: validTelemetry,
+    }, response);
+
+    assert.equal(response.statusCode, 503);
+    assert.match(errors[0], /PGRST204: Could not find the target column/);
+    assert.doesNotMatch(errors[0], /Sensitive row detail/);
+  } finally {
+    console.error = originalConsoleError;
+    supabase.restore();
     restoreEnvironment();
   }
 });

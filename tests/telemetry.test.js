@@ -17,6 +17,7 @@ const validPayload = {
   yellow: true,
   red: false,
   buzzer: true,
+  buzzerEnabled: true,
   buzzerMode: "Active HIGH",
   buzzerType: "active",
   buzzerTest: false,
@@ -55,6 +56,7 @@ test("rejects malformed or out-of-range telemetry", () => {
   assert.equal(normalizeTelemetry({ ...validPayload, ultrasonicOk: 1 }, "now"), null);
   assert.equal(normalizeTelemetry({ ...validPayload, status: "unknown" }, "now"), null);
   assert.equal(normalizeTelemetry({ ...validPayload, commandAck: "not-an-id" }, "now"), null);
+  assert.equal(normalizeTelemetry({ ...validPayload, buzzerEnabled: "off" }, "now"), null);
 });
 
 test("accepts fresh telemetry with small server-to-browser clock skew", () => {
@@ -73,4 +75,9 @@ test("rejects telemetry outside freshness and clock-skew limits", () => {
 test("accepts a valid remote-control acknowledgement", () => {
   const commandAck = "123e4567-e89b-42d3-a456-426614174000";
   assert.equal(normalizeTelemetry({ ...validPayload, commandAck }, "now").commandAck, commandAck);
+});
+
+test("defaults buzzer control to enabled for telemetry from older firmware", () => {
+  const { buzzerEnabled, ...legacyPayload } = validPayload;
+  assert.equal(normalizeTelemetry(legacyPayload, "now").buzzerEnabled, true);
 });

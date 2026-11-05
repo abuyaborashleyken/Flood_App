@@ -12,6 +12,9 @@
 #include <Preferences.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 #include <esp_arduino_version.h>
 
 #if __has_include("secrets.h")
@@ -68,20 +71,29 @@ constexpr float DISPLAY_EMPTY_CM = 15.0f;
 constexpr float DISPLAY_FULL_CM = 0.0f;
 float changeAlertCm = 1.0f; // Distance-change logging threshold, adjustable in dashboard.
 constexpr uint32_t CHANGE_ALERT_COOLDOWN_MS = 950;
-constexpr uint32_t WARNING_BUZZER_ON_MS = 500;
-constexpr uint32_t WARNING_BUZZER_OFF_MS = 500;
-constexpr uint32_t CRITICAL_BUZZER_ON_MS = 300;
-constexpr uint32_t CRITICAL_BUZZER_OFF_MS = 300;
-constexpr uint32_t BUZZER_POWER_OFF_DELAY_MS = 5000;
+constexpr uint32_t WARNING_BUZZER_PULSE_MS = 500;
+constexpr uint32_t CRITICAL_BUZZER_PULSE_MS = 200;
 constexpr uint32_t CLOUD_TELEMETRY_INTERVAL_MS = 1000;
 
 constexpr uint32_t SAMPLE_INTERVAL_MS = 420;
 constexpr uint32_t ECHO_TIMEOUT_US = 27000;
 constexpr float SOUND_SPEED_CM_PER_US = 0.0343f;
+constexpr size_t CLOUD_TELEMETRY_JSON_SIZE = 768;
+constexpr size_t CLOUD_COMMAND_RESPONSE_SIZE = 256;
+
+struct CloudTelemetryRequest {
+  char json[CLOUD_TELEMETRY_JSON_SIZE];
+};
+
+struct CloudCommandResponse {
+  char body[CLOUD_COMMAND_RESPONSE_SIZE];
+};
 
 WebServer server(80);
 DNSServer dns;
 Preferences prefs;
+QueueHandle_t cloudTelemetryQueue = nullptr;
+QueueHandle_t cloudCommandResponseQueue = nullptr;
 
 bool ultrasonicOk = false;
 float distanceCm = -1.0f;
@@ -93,6 +105,7 @@ uint8_t distanceCount = 0, distanceIndex = 0;
 
 String status = "fault"; // safe / warning / critical / fault
 bool buzzerOn = false;
+bool buzzerEnabled = true;
 uint32_t buzzerTestUntilMs = 0; // manual dashboard alarm test is time-limited
 bool greenOn = false, yellowOn = false, redOn = false;
 // SAFE may turn the load LED ON until a CRITICAL reading automatically shuts it
@@ -103,10 +116,10 @@ bool loadLedOffTimerActive = true;
 uint32_t loadLedOffSinceMs = 0;
 uint32_t lastSampleMs = 0;
 uint32_t lastCloudTelemetryMs = 0;
+uint32_t statusSinceMs = 0;
 float lastChangeReferenceCm = -1.0f;
 uint32_t lastChangeAlertMs = 0;
 uint32_t distanceChangeAlertCount = 0;
-uint32_t statusSinceMs = 0;
 float lastAlertDeltaCm = -1.0f;
 float lastAlertDistanceCm = -1.0f;
 uint32_t lastAlertAtMs = 0;
@@ -119,182 +132,1329 @@ const char DASHBOARD_HTML[] PROGMEM = R"AQHTML(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#10213b">
-<title>AquaGuard | Water Level</title>
+<meta name="theme-color" content="#0b1329">
+<title>S.E.C.U.R.E APPLICATION | Professional Water Level Telemetry</title>
 <style>
-:root{--ink:#18243b;--muted:#728197;--navy:#10213b;--blue:#2867ee;--line:#e7edf4;--paper:#f3f6fa;--safe:#12986d;--warn:#b77a0e;--danger:#cf4654;--radius:18px}
-*{box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:Inter,'Segoe UI',Arial,sans-serif;background:var(--paper);color:var(--ink);margin:0;font-size:14px}button,input{font:inherit}button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
-header{background:#0e213d;color:white}.nav{max-width:1160px;margin:auto;min-height:82px;display:flex;align-items:center;justify-content:space-between;padding:17px 25px;gap:15px}.brand{display:flex;align-items:center;gap:11px}.logo{width:43px;height:43px;border-radius:13px;background:#2c68e0;display:grid;place-items:center;font-size:25px;color:#fff}.brand strong{font-size:20px;letter-spacing:-.6px;display:block}.brand small{color:#9db6dc;letter-spacing:1.7px;font-size:10px;font-weight:750}.net{padding:9px 13px;border:1px solid #39516c;background:#1a3152;border-radius:50px;color:#d2e3fb;font-size:12px;display:flex;align-items:center;gap:9px}.dot{width:9px;height:9px;background:#dca54f;display:inline-block;border-radius:50%}.dot.on{background:#4cddaf;box-shadow:0 0 0 4px #4cddaf24}
-header{background:#0e213d;color:white}.nav{max-width:1160px;margin:auto;min-height:82px;display:flex;align-items:center;justify-content:space-between;padding:17px 25px;gap:15px}.brand{display:flex;align-items:center;gap:11px}.logo{width:43px;height:43px;border-radius:13px;background:#2c68e0;display:grid;place-items:center;font-size:25px;color:#fff}.brand strong{font-size:20px;letter-spacing:-.6px;display:block}.brand small{color:#9db6dc;letter-spacing:1.7px;font-size:10px;font-weight:750}.header-tools{display:flex;align-items:center;gap:12px}.clock{min-width:122px;text-align:right}.clock strong{display:block;color:#f3f7ff;font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:.4px}.clock small{display:block;color:#9db6dc;font-size:10px;margin-top:3px}.notification-button{position:relative;width:42px;height:42px;display:grid;place-items:center;border:1px solid #39516c;border-radius:12px;background:#1a3152;color:#d2e3fb}.notification-button:hover{background:#254368}.notification-button svg{width:20px;height:20px}.notification-count{position:absolute;top:-6px;right:-6px;min-width:19px;height:19px;padding:0 5px;display:grid;place-items:center;border:2px solid #0e213d;border-radius:20px;background:#ed5360;color:white;font-size:10px;font-weight:800;line-height:1}.notification-count[hidden]{display:none}.net{padding:9px 13px;border:1px solid #39516c;background:#1a3152;border-radius:50px;color:#d2e3fb;font-size:12px;display:flex;align-items:center;gap:9px}.dot{width:9px;height:9px;background:#dca54f;display:inline-block;border-radius:50%}.dot.on{background:#4cddaf;box-shadow:0 0 0 4px #4cddaf24}
-main{min-width:0;max-width:none;margin:0;padding:29px clamp(18px,3vw,42px) 36px}.app-shell{max-width:1500px;min-height:calc(100vh - 82px);margin:0 auto;display:grid;grid-template-columns:246px minmax(0,1fr);background:var(--paper)}.sidebar{background:#fff;border-right:1px solid var(--line);padding:26px 16px;display:flex;flex-direction:column;gap:9px}.sidebar-label{padding:0 12px 10px;color:#94a1b3;font-size:10px;font-weight:800;letter-spacing:1.5px}.side-link{width:100%;display:flex;align-items:center;gap:12px;border:0;border-radius:11px;padding:13px 12px;text-align:left;background:transparent;color:#607087;font-size:14px;font-weight:700;transition:background .15s,color .15s}.side-link:hover{background:#f1f5fb;color:#213b60}.side-link[aria-pressed="true"]{background:#eaf1ff;color:#245fc9}.side-icon{width:24px;text-align:center;font-size:17px}.sidebar-note{margin-top:auto;padding:14px 12px;border-top:1px solid var(--line);color:#8290a4;font-size:11px;line-height:1.6}.app-view[hidden]{display:none}.eyebrow{color:#617ea7;font-size:11px;font-weight:800;letter-spacing:1.7px;text-transform:uppercase}h1{font-size:clamp(27px,4vw,36px);letter-spacing:-1.2px;margin:10px 0 8px}.sub{color:var(--muted);margin:0;line-height:1.6}.pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px}.updated{color:#74849c;font-size:12px;background:#e7edf7;padding:10px 13px;border-radius:30px}
-.card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:23px;box-shadow:0 12px 28px #203a6609;min-width:0}.cols{display:grid;grid-template-columns:1.12fr .88fr;gap:17px}.card-title{color:#7d8a9d;font-size:12px;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin:0}.status-card{min-height:294px;background:linear-gradient(135deg,#112d55,#0d2141 75%);color:white;border:none;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;position:relative}.status-card:after{content:'';width:260px;height:260px;position:absolute;border-radius:50%;background:rgba(74,130,234,.13);right:-115px;top:-115px}.status-card .card-title{color:#a8bde3}.status-title{margin:24px 0 12px;font-weight:850;font-size:clamp(27px,4vw,39px);line-height:1.1;letter-spacing:-1.1px;position:relative;z-index:1}.status-title.safe{color:#77e6ba}.status-title.warning{color:#ffd178}.status-title.critical{color:#ff9dab}.status-title.fault{color:#f2c276}.status-title.offline{color:#e1e8f2}.status-desc{line-height:1.7;max-width:440px;color:#c7d7f0;font-size:13px;margin:0;position:relative;z-index:1}.condition{margin-top:22px;font-size:12px;display:inline-block;color:#cbdcf8;border:1px solid #476289;background:#23416866;padding:10px 13px;border-radius:10px;align-self:flex-start}
-.level-card{display:flex;align-items:center;justify-content:space-between;gap:15px;min-height:294px}.metric{margin:15px 0 4px;display:flex;align-items:baseline;gap:5px;flex-wrap:wrap}.metric strong{font-size:clamp(38px,5vw,56px);letter-spacing:-2px}.metric span{color:#8390a1;font-size:15px}.helper{color:#7c899c;font-size:12px;line-height:1.55;max-width:310px}.mini{margin-top:17px;color:#647c97;display:grid;gap:8px;font-size:12px}.mini div{display:flex;gap:12px;justify-content:space-between}.mini b{color:#30415a}.tank{height:150px;width:150px;flex:none;clip-path:polygon(50% 0,100% 42%,86% 42%,86% 100%,14% 100%,14% 42%,0 42%);position:relative;overflow:hidden;background:#42b9e8;filter:drop-shadow(0 3px 4px #1c568633)}.tank:before{content:"";position:absolute;inset:6px;background:linear-gradient(135deg,#f6fbff,#e9f4ff);clip-path:polygon(50% 2%,96% 43%,84% 43%,84% 96%,16% 96%,16% 43%,4% 43%);z-index:0}.tank:after{content:"";position:absolute;left:8px;right:8px;top:8px;bottom:8px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 38px,#bdd0e480 39px,#bdd0e480 40px);clip-path:polygon(50% 2%,96% 43%,84% 43%,84% 96%,16% 96%,16% 43%,4% 43%);pointer-events:none;z-index:2}.tank-water{position:absolute;bottom:8px;left:8px;right:8px;height:0%;background:linear-gradient(#6bd1ed,#307dec);clip-path:polygon(50% 2%,96% 43%,84% 43%,84% 96%,16% 96%,16% 43%,4% 43%);transition:height .65s ease;min-height:0;z-index:1}.tank-water:before{content:"";position:absolute;height:9px;background:#adeaf9c0;top:0;left:0;right:0}.tank-text{position:absolute;inset:0;display:grid;place-items:center;z-index:3;font-weight:800;color:#193d6d;text-shadow:0 1px 6px white;font-size:15px;padding-top:34px}
-.stats-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:26px 0 13px}.stats-title h2{font-size:17px;letter-spacing:-.3px;margin:0}.stats-title span{color:#95a1b2;font-size:12px}.sensors{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.sensor{border:1px solid var(--line);border-radius:14px;background:#fff;padding:18px;min-width:0}.sensor small{display:block;color:#8592a6;font-size:12px;margin-bottom:8px}.sensor strong{font-size:18px;letter-spacing:-.4px;overflow-wrap:anywhere}.sensor .secondary{color:#8290a5;font-size:11px;margin-top:8px}
-.lower{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-top:17px}.charthead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:18px}.charthead b{font-size:15px}.charthead span{color:#93a1b0;font-size:11px}canvas{width:100%;height:182px;display:block}.ledrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0 20px}.lightbox{border-radius:13px;background:#f7f9fc;padding:13px 8px;text-align:center;border:1px solid #edf1f6}.led{display:block;width:29px;height:29px;border-radius:50%;background:#d8dee7;margin:2px auto 12px;box-shadow:inset 0 0 0 5px #edf1f6}.led.green.on{background:#16c28b;box-shadow:0 0 0 4px #dcf9ed,0 0 15px #28c691}.led.yellow.on{background:#f0b83b;box-shadow:0 0 0 4px #fff1d2,0 0 15px #e9bd59}.led.red.on{background:#ee5461;box-shadow:0 0 0 4px #ffdde2,0 0 15px #f17884}.lightbox b{font-size:12px}.lightbox small{display:block;margin-top:3px;color:#95a0b0;font-size:10px}.hrow{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid #eef2f7;font-size:12px;gap:8px}.hrow:last-child{border:0}.hrow span{color:#78869b}.hrow strong{color:#273a57}.hrow strong.alarm{color:var(--danger)}.test-panel{border-top:1px solid #e7edf4;margin-top:14px;padding-top:15px}.test-panel .btn{width:100%;background:#173b70}.test-panel .btn:hover{background:#102947}.test-panel .hint{margin-top:9px;font-size:11px}.test-panel .message{min-height:0}.test-panel .message.ok{color:#0b926b}
-.cal-head{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-top:26px;margin-bottom:12px}.cal-head h2{margin:0;font-size:17px}.cal-head p{margin:5px 0 0;color:#8491a4;line-height:1.6;font-size:12px}.config-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.field label{display:block;color:#566982;font-weight:700;font-size:12px;margin-bottom:8px}.field input{border:1px solid #dce4ef;border-radius:10px;padding:12px 11px;width:100%;color:#172942;background:#fff;font-size:14px;outline:none}.field input:focus{border-color:#4d83e8;box-shadow:0 0 0 3px #377aff1b}.settings-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:17px}.hint{color:#78889f;font-size:12px;line-height:1.7;max-width:710px}.btn{border:0;background:#2768e9;color:white;padding:12px 18px;border-radius:11px;font-size:13px;font-weight:800;white-space:nowrap}.btn:hover{background:#1d54c0}.message{min-height:20px;margin-top:10px;font-size:12px;color:#526880}.message.error{color:#d24753}.message.ok{color:#0b926b}
-.footer{text-align:center;color:#93a0b0;font-size:11px;line-height:1.7;padding:0 20px 30px}.preview{background:#fff3d5;color:#775621;font-size:12px;padding:10px 15px;text-align:center}
-@media(max-width:900px){.sensors{grid-template-columns:repeat(2,1fr)}.config-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:680px){.nav{padding:14px 16px}.brand strong{font-size:19px}.header-tools{gap:8px}.clock{min-width:0}.clock strong{font-size:13px}.clock small{font-size:9px}.notification-button{width:38px;height:38px}.net{padding:8px 10px;font-size:11px}.app-shell{grid-template-columns:1fr;min-height:0}.sidebar{position:sticky;top:0;z-index:10;border-right:0;border-bottom:1px solid var(--line);padding:10px 12px;display:block}.sidebar-label,.sidebar-note{display:none}.side-nav{display:flex;gap:7px}.side-link{justify-content:center;gap:7px;padding:10px 5px;font-size:12px}.side-icon{width:auto}.side-link span:last-child{white-space:nowrap}main{padding:24px 14px 28px}.cols,.lower{grid-template-columns:1fr}.card{padding:19px}.level-card{min-height:255px}.tank{height:132px;width:132px}.config-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.status-card{min-height:250px}.btn{width:100%}.settings-bottom{align-items:stretch}.sensors{gap:10px}.sensor{padding:15px}}
-@media(max-width:345px){.config-grid{grid-template-columns:1fr}.net{font-size:10px}.tank{height:116px;width:116px}.metric strong{font-size:36px}.sensors{grid-template-columns:1fr}}
-select.driver-select{width:100%;border:1px solid #dae3ed;border-radius:10px;padding:12px;background:white;color:#243450;margin-top:6px}.test-panel .btn{margin-bottom:8px}
-.notification-slot{display:contents}.toast{position:fixed;top:96px;right:18px;z-index:1000;width:min(380px,calc(100vw - 36px));margin:0;display:flex;align-items:flex-start;gap:12px;padding:12px 14px;background:#fff;border:1px solid #e5eaf1;border-left:5px solid #2867ee;border-radius:14px;box-shadow:0 16px 42px #12284930;opacity:0;transform:translateY(-8px);transition:opacity .2s ease,transform .2s ease}.toast.show{opacity:1;transform:translateY(0)}.toast.warning{border-left-color:#d99a21}.toast.critical{border-left-color:#cf4654}.toast.fault{border-left-color:#b77a0e}.toast.safe{border-left-color:#12986d}.toast-icon{width:32px;height:32px;flex:none;border-radius:50%;display:grid;place-items:center;background:#edf3ff;color:#2867ee;font-weight:900}.toast.warning .toast-icon{background:#fff5df;color:#a86f05}.toast.critical .toast-icon{background:#fff0f2;color:#cf4654}.toast.fault .toast-icon{background:#fff5df;color:#a86f05}.toast.safe .toast-icon{background:#e8f9f2;color:#12986d}.toast-main{flex:1;min-width:0;display:flex;align-items:flex-start;gap:12px;padding:2px 0;border:0;background:transparent;text-align:left;color:inherit}.toast-main:not(:disabled){cursor:pointer}.toast-main:not(:disabled):hover .toast-copy strong{text-decoration:underline}.toast-main:disabled{cursor:default;opacity:1}.toast-copy{flex:1;min-width:0}.toast-copy strong{display:block;color:#18243b;font-size:14px;margin:1px 0 4px}.toast-copy span{display:block;color:#68788e;font-size:12px;line-height:1.5}.toast-close{border:0;background:transparent;color:#8794a6;padding:0 2px;font-size:20px;line-height:1}.toast[hidden]{display:none}
-.power-dialog{position:fixed;z-index:2000;inset:96px 18px auto auto;margin:0;width:min(390px,calc(100vw - 36px));max-height:calc(100vh - 112px);overflow-y:auto;border:0;border-radius:18px;padding:19px;color:var(--ink);box-shadow:0 16px 42px #12284930}.power-dialog::backdrop{background:transparent}.power-dialog h2{margin:0 0 8px;font-size:19px}.power-dialog p{color:#65758b;font-size:13px;line-height:1.5;margin:0}.power-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}.power-action{border:0;border-radius:10px;padding:11px 10px;background:#dce2eb;color:#667287;font-size:13px;font-weight:800}.power-action:disabled{cursor:not-allowed;opacity:.65}.power-action.action-off{background:#dc3e50;color:white}.power-action.action-on{background:#e6f7ec;color:#177346}
-.history-dialog{position:fixed;z-index:2000;inset:96px 18px auto auto;margin:0;width:min(540px,calc(100vw - 36px));max-height:calc(100vh - 112px);border:0;border-radius:18px;padding:0;color:var(--ink);box-shadow:0 16px 42px #12284930;overflow:hidden}.history-dialog::backdrop{background:transparent}.history-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding:21px 23px 16px;border-bottom:1px solid var(--line)}.history-head h2{margin:0;font-size:20px}.history-head p{margin:5px 0 0;color:#8491a4;font-size:12px}.history-close{width:34px;height:34px;border:0;border-radius:9px;background:#f1f4f8;color:#53647b;font-size:21px;line-height:1}.history-list{max-height:calc(100vh - 220px);overflow-y:auto;padding:8px 14px 14px}.history-empty{padding:28px 14px;text-align:center;color:#8390a3;font-size:13px}.history-item{width:100%;display:block;padding:13px 10px;text-align:left;border:0;border-bottom:1px solid #edf1f6;background:#fff;color:inherit}.history-item:last-child{border-bottom:0}.history-item:not(:disabled){cursor:pointer}.history-item:not(:disabled):hover{background:#f7f9fc}.history-item:disabled{cursor:default;opacity:1}.history-item-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.history-item-head strong{font-size:13px}.history-kind{padding:4px 8px;border-radius:20px;background:#f1f4f8;color:#718096;font-size:10px;font-weight:800;text-transform:uppercase}.history-kind.warning{background:#fff5df;color:#a86f05}.history-kind.critical{background:#fff0f2;color:#c83e4c}.history-kind.fault{background:#fff5df;color:#a86f05}.history-kind.safe{background:#e8f9f2;color:#12845f}.history-item time{display:block;margin-top:5px;color:#8592a5;font-size:11px;font-variant-numeric:tabular-nums}.history-item-description{display:block;margin-top:5px;color:#68788e;font-size:12px;line-height:1.5}
-@media(max-width:680px){.toast{top:82px;right:12px;width:calc(100vw - 24px)}.power-dialog,.history-dialog{inset:82px 12px auto auto;width:calc(100vw - 24px);max-height:calc(100vh - 94px)}.history-list{max-height:calc(100vh - 200px)}}
-/* Power Source page controls for the additional low-voltage LED. */
-.led-control-card{margin-top:17px}.load-led-layout{display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap}.load-led-status{display:flex;align-items:center;gap:14px}.load-led-dot{height:16px;width:16px;flex:none;border-radius:50%;background:#a5acb9;box-shadow:0 0 0 5px #f0f3f7}.load-led-dot.on{background:#20a574;box-shadow:0 0 0 5px #e1f6ed}.load-led-status strong{font-size:20px;letter-spacing:-.4px}.load-led-actions{display:flex;gap:11px;flex-wrap:wrap}.load-led-actions button{min-width:132px;border:1px solid transparent;border-radius:11px;padding:13px 20px;font-size:14px;font-weight:750;transition:background .15s,box-shadow .15s,transform .15s}.load-led-actions button:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 5px 13px #1228491c}.load-led-actions button:focus-visible{outline:3px solid #8bb5ff;outline-offset:3px}.load-led-actions button:disabled{opacity:.5;cursor:not-allowed}.load-led-on{background:#137c5b;color:white}.load-led-on:not(:disabled):hover{background:#0e684c}.load-led-off{background:#fff;color:#b43e4b;border-color:#e5bfc3!important}.load-led-off:not(:disabled):hover{background:#fff3f4}.load-led-help{color:#718096;font-size:13px;line-height:1.7;margin:20px 0 0;padding-top:16px;border-top:1px solid var(--line)}.led-control-message{min-height:20px;margin-top:12px;font-size:13px;color:#42617b}
-@media(max-width:680px){.load-led-layout{align-items:flex-start}.load-led-actions{width:100%}.load-led-actions button{flex:1}}
-/* Keep the dashboard comfortable on tablets and narrow phone screens. */
-@media(max-width:900px){
- .app-shell{grid-template-columns:210px minmax(0,1fr)}
- main{padding:24px 20px 30px}
- .cols,.lower{grid-template-columns:1fr}
- .status-card,.level-card{min-height:245px}
+:root{
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Inter",Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+  --bg-app:#f8fafc;
+  --bg-card:#ffffff;
+  --border-subtle:#e2e8f0;
+  --border-card:#e2e8f0;
+  --ink-primary:#0f172a;
+  --ink-secondary:#475569;
+  --ink-muted:#64748b;
+  --ink-light:#94a3b8;
+  --navy-dark:#0b1329;
+  --navy-surface:#0f1d38;
+  --navy-card:#132347;
+  --navy-border:#1e3561;
+  --blue-brand:#2563eb;
+  --blue-hover:#1d4ed8;
+  --blue-soft:#eff6ff;
+  --safe-base:#10b981;
+  --safe-surface:#ecfdf5;
+  --safe-text:#065f46;
+  --safe-glow:rgba(16,185,129,.35);
+  --warn-base:#f59e0b;
+  --warn-surface:#fffbeb;
+  --warn-text:#92400e;
+  --warn-glow:rgba(245,158,11,.35);
+  --danger-base:#ef4444;
+  --danger-surface:#fef2f2;
+  --danger-text:#991b1b;
+  --danger-glow:rgba(239,68,68,.35);
+  --radius-sm:8px;
+  --radius-md:12px;
+  --radius-lg:16px;
+  --radius-xl:20px;
+  --shadow-sm:0 1px 3px rgba(15,23,42,.06);
+  --shadow-card:0 4px 14px rgba(15,23,42,.05),0 1px 3px rgba(15,23,42,.03);
+  --shadow-elevated:0 14px 34px rgba(15,23,42,.08),0 4px 10px rgba(15,23,42,.04);
 }
-@media(max-width:680px){
- html,body{width:100%;min-width:0;overflow-x:hidden}
- .nav{min-height:0;flex-wrap:wrap;padding:12px 14px;gap:10px}
- .header-tools{width:100%;justify-content:space-between;flex-wrap:wrap}
- .connection-clock{min-width:0;gap:4px}
- .connection-clock .clock{text-align:center}
- .app-shell{display:block;min-height:0}
- .sidebar{position:sticky;top:0;padding:8px;background:#fff}
- .side-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
- .side-link{min-width:0;min-height:48px;flex-direction:column;justify-content:center;gap:2px;padding:5px 2px;font-size:10px;line-height:1.15}
- .side-link span:last-child{white-space:normal;text-align:center;overflow-wrap:anywhere}
- .side-icon{font-size:16px;line-height:1}
- main{padding:20px 13px 26px}
- .pagehead{align-items:flex-start;gap:10px;margin-bottom:17px}
- .pagehead>div{min-width:0}
- .updated{max-width:100%;padding:8px 10px;font-size:11px}
- .cols,.lower{grid-template-columns:minmax(0,1fr);gap:12px}
- .card{padding:17px;border-radius:15px}
- .status-card{min-height:220px}
- .status-title{font-size:clamp(26px,8vw,36px);margin:18px 0 10px}
- .condition{margin-top:16px;max-width:100%;line-height:1.5}
- .level-card{min-height:210px;gap:8px}
- .tank{width:clamp(100px,32vw,132px);height:clamp(100px,32vw,132px)}
- .metric strong{font-size:clamp(38px,12vw,52px)}
- .metric span{font-size:13px}
- .sensors{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
- .sensor{padding:13px}
- .sensor strong{font-size:16px}
- .stats-title{align-items:flex-start;flex-wrap:wrap;margin-top:20px}
- .config-grid{grid-template-columns:minmax(0,1fr)}
- .settings-bottom{align-items:stretch}
- .settings-bottom .btn,.test-panel .btn{width:100%;min-height:44px;white-space:normal}
- .load-led-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
- .load-led-actions button{min-width:0;min-height:46px;padding:11px 8px}
- .power-actions{grid-template-columns:1fr}
- .power-action,.dialog-close,.history-close{min-height:44px}
- .history-dialog{overflow:hidden}
- .history-head{padding:17px}
- .history-list{max-height:calc(100dvh - 190px)}
- canvas{height:170px}
- .footer{padding-right:14px;padding-left:14px}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  font-family:var(--font-sans);
+  background:var(--bg-app);
+  color:var(--ink-primary);
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  display:flex;
+  height:100vh;
+  height:100dvh;
+  flex-direction:column;
+  overflow:hidden;
 }
-@media(max-width:400px){
- .nav{padding:10px 12px}
- .header-tools{gap:6px}
- .clock strong{font-size:12px}
- .clock small{font-size:9px}
- .net{padding:7px 8px;font-size:10px}
- main{padding-right:10px;padding-left:10px}
- .card{padding:14px}
- .level-card{align-items:flex-start}
- .tank{width:100px;height:100px;margin-top:18px}
- .mini div{gap:6px;font-size:11px}
- .sensor{padding:11px}
- .lightbox{padding:11px 4px}
- .lightbox b{font-size:10px}
- .hrow{font-size:11px}
- .hrow strong{text-align:right}
- .dialog-distance{align-items:flex-start;gap:8px;flex-direction:column}
- .toast{gap:8px;padding:10px}
- .toast-main{gap:8px}
+button,input,select{font:inherit}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.55}
+header{
+  position:sticky;
+  top:0;
+  z-index:1200;
+  background:var(--navy-dark);
+  color:#fff;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  box-shadow:0 4px 20px rgba(0,0,0,.15);
+  flex:none;
+}
+.nav{
+  max-width:1600px;
+  margin:0 auto;
+  min-height:72px;
+  padding:12px clamp(16px,3vw,32px);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+.brand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+  text-decoration:none;
+}
+.logo{
+  width:46px;
+  height:46px;
+  border-radius:14px;
+  background:linear-gradient(135deg,#0284c7,#2563eb);
+  color:#fff;
+  border:2px solid #38bdf8;
+  box-shadow:0 0 16px rgba(56,189,248,.35);
+  flex:none;
+  display:grid;
+  place-items:center;
+  font-size:22px;
+  font-weight:900;
+}
+.brand-copy{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.brand strong{
+  font-size:clamp(16px,2vw,19px);
+  font-weight:800;
+  letter-spacing:-.4px;
+  color:#fff;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.brand-badge{
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.8px;
+  padding:2px 7px;
+  border-radius:6px;
+  background:rgba(56,189,248,.18);
+  color:#7dd3fc;
+  border:1px solid rgba(56,189,248,.3);
+  text-transform:uppercase;
+}
+.brand small{
+  color:#94a3b8;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+}
+.header-tools{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex:0 0 auto;
+  margin-left:auto;
+}
+.power-source-toggle{
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  min-height:38px;
+  padding:6px 12px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:var(--radius-md);
+  background:var(--navy-surface);
+  color:#e2e8f0;
+  font-size:12px;
+  font-weight:700;
+  white-space:nowrap;
+  transition:all .18s ease;
+}
+.power-source-toggle:hover:not(:disabled){
+  background:#1a2f55;
+  border-color:rgba(255,255,255,.25);
+}
+.power-source-toggle:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+.power-switch-track{
+  width:32px;
+  height:18px;
+  border-radius:18px;
+  background:#475569;
+  position:relative;
+  flex:none;
+  transition:background .2s cubic-bezier(.4,0,.2,1);
+}
+.power-switch-track::after{
+  content:"";
+  position:absolute;
+  top:2px;
+  left:2px;
+  width:14px;
+  height:14px;
+  border-radius:50%;
+  background:#fff;
+  box-shadow:0 1px 3px rgba(0,0,0,.3);
+  transition:transform .2s cubic-bezier(.4,0,.2,1);
+}
+.power-source-toggle[aria-pressed="true"] .power-switch-track{
+  background:var(--safe-base);
+  box-shadow:0 0 8px var(--safe-glow);
+}
+.power-source-toggle[aria-pressed="true"] .power-switch-track::after{
+  transform:translateX(14px);
+}
+.alert-sound-button, .notification-button{
+  width:38px;
+  height:38px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:var(--radius-md);
+  background:var(--navy-surface);
+  color:#e2e8f0;
+  position:relative;
+  transition:all .18s ease;
+}
+.alert-sound-button:hover, .notification-button:hover{
+  background:#1a2f55;
+  color:#fff;
+  border-color:rgba(255,255,255,.3);
+}
+.alert-sound-button svg, .notification-button svg{width:18px;height:18px}
+.alert-sound-button .sound-waves{display:none}
+.alert-sound-button.sound-on{color:#38bdf8;border-color:#0284c7;background:#0c4a6e40}
+.alert-sound-button.sound-on .sound-waves{display:block}
+.alert-sound-button.sound-on .sound-muted{display:none}
+.notification-count{
+  position:absolute;
+  top:-5px;
+  right:-5px;
+  min-width:18px;
+  height:18px;
+  padding:0 5px;
+  display:grid;
+  place-items:center;
+  border:2px solid var(--navy-dark);
+  border-radius:18px;
+  background:var(--danger-base);
+  color:#fff;
+  font-size:10px;
+  font-weight:800;
+  line-height:1;
+}
+.notification-count[hidden]{display:none}
+.connection-clock{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:6px 12px;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:var(--radius-md);
+}
+.dot{
+  width:9px;
+  height:9px;
+  border-radius:50%;
+  background:#f59e0b;
+  flex:none;
+}
+.dot.on{
+  background:var(--safe-base);
+  box-shadow:0 0 0 3px rgba(16,185,129,.25),0 0 10px rgba(16,185,129,.6);
+  animation:beacon-pulse 2s cubic-bezier(.4,0,.6,1) infinite;
+}
+.dot.offline{
+  background:var(--danger-base);
+  box-shadow:0 0 0 3px rgba(239,68,68,.25),0 0 8px rgba(239,68,68,.5);
+}
+@keyframes beacon-pulse{
+  0%,100%{box-shadow:0 0 0 3px rgba(16,185,129,.25),0 0 8px rgba(16,185,129,.5)}
+  50%{box-shadow:0 0 0 6px rgba(16,185,129,.08),0 0 14px rgba(16,185,129,.7)}
+}
+.clock{
+  display:flex;
+  flex-direction:column;
+  text-align:right;
+}
+.clock strong{
+  font-family:var(--font-mono);
+  font-size:13px;
+  font-weight:700;
+  color:#f8fafc;
+  line-height:1.2;
+}
+.clock small{font-size:10px;color:#94a3b8;line-height:1.2}
+.app-shell{
+  display:grid;
+  grid-template-columns:250px minmax(0,1fr);
+  flex:1 1 0;
+  min-height:0;
+  height:auto;
+  max-width:1600px;
+  width:100%;
+  margin:0 auto;
+  background:var(--bg-app);
+  overflow:hidden;
+  transition:grid-template-columns .24s cubic-bezier(.4,0,.2,1);
+}
+.sidebar{
+  background:#fff;
+  border-right:1px solid var(--border-subtle);
+  padding:20px 14px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.sidebar-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 8px 12px;
+  border-bottom:1px solid var(--border-subtle);
+  margin-bottom:6px;
+}
+.sidebar-label{
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:1.2px;
+  color:var(--ink-muted);
+  text-transform:uppercase;
+}
+.sidebar-menu-toggle{
+  width:34px;
+  height:34px;
+  display:grid;
+  place-items:center;
+  border:1px solid var(--border-subtle);
+  border-radius:var(--radius-sm);
+  background:transparent;
+  color:var(--ink-secondary);
+  transition:all .15s ease;
+}
+.sidebar-menu-toggle:hover{
+  background:var(--bg-app);
+  color:var(--blue-brand);
+  border-color:var(--blue-brand);
+}
+.sidebar-menu-toggle svg{width:16px;height:16px}
+.side-nav{display:flex;flex-direction:column;gap:6px}
+.side-link{
+  width:100%;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  border:1px solid transparent;
+  border-radius:var(--radius-md);
+  padding:12px 14px;
+  text-align:left;
+  background:transparent;
+  color:var(--ink-secondary);
+  font-size:13px;
+  font-weight:700;
+  transition:all .15s ease;
+}
+.side-link:hover{background:#f1f5f9;color:var(--ink-primary)}
+.side-link[aria-pressed="true"]{
+  background:var(--blue-soft);
+  color:var(--blue-brand);
+  border-color:rgba(37,99,235,.2);
+  box-shadow:inset 3px 0 0 var(--blue-brand);
+}
+.side-icon{width:22px;display:grid;place-items:center;font-size:16px;color:currentColor}
+.sidebar-note{
+  margin-top:auto;
+  padding:14px;
+  border-radius:var(--radius-md);
+  background:#f8fafc;
+  border:1px solid var(--border-subtle);
+  color:var(--ink-muted);
+  font-size:11px;
+  line-height:1.6;
+}
+.app-shell.sidebar-collapsed{grid-template-columns:74px minmax(0,1fr)}
+.sidebar-collapsed .sidebar{padding:20px 8px;align-items:center}
+.sidebar-collapsed .sidebar-head{width:100%;justify-content:center;padding:0 0 12px}
+.sidebar-collapsed .sidebar-label,
+.sidebar-collapsed .sidebar-note,
+.sidebar-collapsed .side-link span:last-child{display:none}
+.sidebar-collapsed .side-link{justify-content:center;padding:12px}
+main{
+  min-height:0;
+  min-width:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scroll-behavior:smooth;
+  -webkit-overflow-scrolling:touch;
+  padding:28px clamp(16px,3vw,36px) 40px;
+}
+.app-view[hidden]{display:none}
+.pagehead{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:24px;
+}
+.eyebrow{
+  color:var(--blue-brand);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+h1{
+  font-size:clamp(24px,3.2vw,32px);
+  font-weight:850;
+  letter-spacing:-.8px;
+  color:var(--ink-primary);
+  margin:6px 0 4px;
+}
+.sub{color:var(--ink-muted);font-size:13px;margin:0;max-width:600px}
+.updated{
+  color:var(--ink-secondary);
+  font-size:12px;
+  font-weight:600;
+  background:#fff;
+  border:1px solid var(--border-subtle);
+  padding:8px 14px;
+  border-radius:var(--radius-full);
+  box-shadow:var(--shadow-sm);
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+}
+.updated::before{content:"";width:7px;height:7px;border-radius:50%;background:#3b82f6;box-shadow:0 0 6px #3b82f6}
+.card{
+  background:var(--bg-card);
+  border:1px solid var(--border-card);
+  border-radius:var(--radius-lg);
+  padding:24px;
+  box-shadow:var(--shadow-card);
+  min-width:0;
+  position:relative;
+}
+.cols{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
+.card-title{
+  color:var(--ink-muted);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  margin:0 0 8px;
+}
+.status-card{
+  min-height:300px;
+  background:linear-gradient(145deg,#0a152d 0%,#0f2244 55%,#132b57 100%);
+  color:#fff;
+  border:1px solid #1e3a6a;
+  box-shadow:0 12px 36px rgba(11,21,45,.2),0 0 0 1px rgba(255,255,255,.05);
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  overflow:hidden;
+  position:relative;
+}
+.status-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:radial-gradient(circle at 85% 15%,rgba(56,189,248,.15),transparent 60%);
+  pointer-events:none;
+}
+.status-card .card-title{color:#93c5fd}
+.status-title{
+  margin:20px 0 10px;
+  font-size:clamp(28px,4vw,40px);
+  font-weight:900;
+  line-height:1.1;
+  letter-spacing:-1px;
+  position:relative;
+  z-index:1;
+}
+.status-title.safe{color:#6ee7b7;text-shadow:0 0 24px rgba(16,185,129,.4)}
+.status-title.warning{color:#fde047;text-shadow:0 0 24px rgba(245,158,11,.45)}
+.status-title.critical{color:#fca5a5;text-shadow:0 0 24px rgba(239,68,68,.5)}
+.status-title.fault{color:#fed7aa}
+.status-title.offline{color:#cbd5e1}
+.status-desc{color:#cbd5e1;font-size:13px;line-height:1.65;max-width:460px;margin:0;position:relative;z-index:1}
+.condition{
+  margin-top:20px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:#93c5fd;
+  background:rgba(15,34,68,.7);
+  border:1px solid rgba(147,197,253,.25);
+  padding:10px 14px;
+  border-radius:var(--radius-md);
+  align-self:flex-start;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  backdrop-filter:blur(6px);
+  position:relative;
+  z-index:1;
+}
+.condition::before{content:"";width:7px;height:7px;border-radius:50%;background:#38bdf8;box-shadow:0 0 6px #38bdf8}
+.level-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  min-height:300px;
+}
+.level-meta{flex:1;min-width:0}
+.metric{
+  margin:12px 0 6px;
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.metric strong{
+  font-size:clamp(42px,5.5vw,62px);
+  font-weight:900;
+  letter-spacing:-2px;
+  color:var(--ink-primary);
+  line-height:1;
+  font-family:var(--font-mono);
+}
+.metric span{
+  color:var(--ink-muted);
+  font-size:14px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.8px;
+}
+.helper{color:var(--ink-muted);font-size:12px;line-height:1.55;max-width:320px}
+.mini{
+  margin-top:18px;
+  display:grid;
+  gap:8px;
+  font-size:12px;
+  padding-top:14px;
+  border-top:1px solid var(--border-subtle);
+}
+.mini div{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.mini span{color:var(--ink-muted)}
+.mini b{color:var(--ink-primary);font-family:var(--font-mono);font-size:13px}
+.tank{
+  height:170px;
+  width:140px;
+  flex:none;
+  position:relative;
+  background:linear-gradient(180deg,#f8fafc,#edf2f7);
+  border:3px solid #cbd5e1;
+  border-radius:24px 24px 18px 18px;
+  overflow:hidden;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.08),0 8px 20px rgba(15,23,42,.06);
+}
+.tank::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:12px;
+  background:repeating-linear-gradient(to bottom,transparent 0,transparent 33px,#94a3b8 34px,#94a3b8 35px);
+  z-index:4;
+  opacity:.7;
+  pointer-events:none;
+}
+.tank::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,rgba(255,255,255,.45) 0%,rgba(255,255,255,0) 40%,rgba(255,255,255,.25) 100%);
+  z-index:5;
+  pointer-events:none;
+  border-radius:inherit;
+}
+.tank-water{
+  position:absolute;
+  bottom:0;
+  left:0;
+  right:0;
+  height:0%;
+  background:linear-gradient(180deg,#38bdf8 0%,#2563eb 50%,#1d4ed8 100%);
+  transition:height .75s cubic-bezier(.34,1.25,.64,1);
+  min-height:0;
+  z-index:2;
+}
+.tank-water::before{
+  content:"";
+  position:absolute;
+  top:-4px;
+  left:0;
+  right:0;
+  height:8px;
+  background:#bae6fd;
+  border-radius:50%;
+  box-shadow:0 0 10px #38bdf8;
+  animation:wave-crest 3s ease-in-out infinite alternate;
+}
+@keyframes wave-crest{
+  0%{transform:scaleY(.8) translateY(0)}
+  100%{transform:scaleY(1.3) translateY(1px)}
+}
+.tank-text{
+  position:absolute;
+  inset:auto 12px 14px 12px;
+  padding:6px 0;
+  background:rgba(11,19,41,.75);
+  backdrop-filter:blur(8px);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:8px;
+  text-align:center;
+  font-family:var(--font-mono);
+  font-size:14px;
+  font-weight:900;
+  z-index:6;
+  box-shadow:0 4px 12px rgba(0,0,0,.15);
+}
+.stats-title{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin:32px 0 14px;
+}
+.stats-title h2{font-size:16px;font-weight:800;letter-spacing:-.3px;margin:0;color:var(--ink-primary)}
+.stats-title span{color:var(--ink-muted);font-size:12px;font-weight:600}
+.sensors{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.sensor{
+  background:#fff;
+  border:1px solid var(--border-card);
+  border-radius:var(--radius-lg);
+  padding:20px;
+  box-shadow:var(--shadow-card);
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  transition:all .18s ease;
+}
+.sensor:hover{transform:translateY(-2px);box-shadow:var(--shadow-elevated);border-color:#cbd5e1}
+.sensor small{
+  color:var(--ink-muted);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  display:block;
+  margin-bottom:8px;
+}
+.sensor strong{
+  font-size:19px;
+  font-weight:850;
+  color:var(--ink-primary);
+  letter-spacing:-.5px;
+  font-family:var(--font-mono);
+  overflow-wrap:anywhere;
+}
+.sensor .secondary{
+  color:var(--ink-muted);
+  font-size:11px;
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px dashed var(--border-subtle);
+}
+.lower{display:grid;grid-template-columns:1.25fr .75fr;gap:20px;margin-top:20px}
+.charthead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:18px}
+.charthead b{font-size:15px;font-weight:800;color:var(--ink-primary)}
+.charthead span{
+  color:var(--ink-muted);
+  font-size:11px;
+  font-weight:600;
+  padding:3px 8px;
+  border-radius:var(--radius-full);
+  background:#f1f5f9;
+}
+canvas{
+  width:100%;
+  height:190px;
+  display:block;
+  border-radius:var(--radius-md);
+  background:#fafcff;
+  border:1px solid var(--border-subtle);
+}
+.ledrow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0 20px}
+.lightbox{
+  border-radius:var(--radius-md);
+  background:#f8fafc;
+  padding:14px 10px;
+  text-align:center;
+  border:1px solid var(--border-subtle);
+  transition:all .15s ease;
+}
+.led{
+  display:block;
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  background:#cbd5e1;
+  margin:4px auto 10px;
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.2),0 0 0 4px #e2e8f0;
+  transition:all .2s ease;
+}
+.led.green.on{
+  background:radial-gradient(circle at 35% 35%,#6ee7b7,#10b981 70%,#059669);
+  box-shadow:0 0 0 4px #d1fae5,0 0 22px rgba(16,185,129,.85);
+}
+.led.yellow.on{
+  background:radial-gradient(circle at 35% 35%,#fde047,#f59e0b 70%,#d97706);
+  box-shadow:0 0 0 4px #fef3c7,0 0 22px rgba(245,158,11,.85);
+}
+.led.red.on{
+  background:radial-gradient(circle at 35% 35%,#fca5a5,#ef4444 70%,#b91c1c);
+  box-shadow:0 0 0 4px #fee2e2,0 0 22px rgba(239,68,68,.85);
+}
+.lightbox b{font-size:12px;font-weight:700;color:var(--ink-primary)}
+.hrow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:11px 0;
+  border-bottom:1px solid var(--border-subtle);
+  font-size:12px;
+  gap:10px;
+}
+.hrow:last-child{border-bottom:0}
+.hrow span{color:var(--ink-secondary)}
+.hrow strong{color:var(--ink-primary);font-family:var(--font-mono);font-weight:700}
+.hrow strong.alarm{color:var(--danger-base);font-weight:800}
+.test-panel{border-top:1px solid var(--border-subtle);margin-top:16px;padding-top:16px}
+.buzzer-toggle-ui{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:12px 14px;
+  background:#f8fafc;
+  border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);
+}
+.buzzer-toggle-copy{display:grid;gap:2px}
+.buzzer-toggle-copy strong{color:var(--ink-primary);font-size:13px;font-weight:750}
+.buzzer-toggle-copy span{color:var(--ink-muted);font-size:11px}
+.buzzer-toggle-button{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  min-height:38px;
+  padding:6px 12px;
+  border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);
+  background:#fff;
+  color:var(--ink-secondary);
+  font-weight:750;
+  font-size:12px;
+  box-shadow:var(--shadow-sm);
+  transition:all .18s ease;
+}
+.buzzer-toggle-button[aria-pressed="true"]{
+  background:var(--safe-surface);
+  color:var(--safe-text);
+  border-color:rgba(16,185,129,.3);
+}
+.buzzer-toggle-track{
+  width:32px;
+  height:18px;
+  border-radius:18px;
+  background:#cbd5e1;
+  position:relative;
+  flex:none;
+  transition:background .2s ease;
+}
+.buzzer-toggle-track::after{
+  content:"";
+  position:absolute;
+  top:2px;
+  left:2px;
+  width:14px;
+  height:14px;
+  border-radius:50%;
+  background:#fff;
+  box-shadow:0 1px 3px rgba(0,0,0,.25);
+  transition:transform .2s ease;
+}
+.buzzer-toggle-button[aria-pressed="true"] .buzzer-toggle-track{background:var(--safe-base)}
+.buzzer-toggle-button[aria-pressed="true"] .buzzer-toggle-track::after{transform:translateX(14px)}
+.buzzer-toggle-message{min-height:18px;margin-top:8px;color:var(--ink-muted);font-size:12px}
+.buzzer-toggle-message.error{color:var(--danger-base)}
+select.driver-select{
+  width:100%;
+  border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);
+  padding:10px 12px;
+  background:#fff;
+  color:var(--ink-primary);
+  margin-top:6px;
+}
+.btn{
+  border:0;
+  background:var(--blue-brand);
+  color:#fff;
+  padding:11px 18px;
+  border-radius:var(--radius-md);
+  font-size:13px;
+  font-weight:750;
+  white-space:nowrap;
+  box-shadow:0 2px 6px rgba(37,99,235,.25);
+  transition:all .15s ease;
+}
+.btn:hover:not(:disabled){background:var(--blue-hover);box-shadow:0 4px 12px rgba(37,99,235,.35)}
+.btn:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+.hint{color:var(--ink-muted);font-size:12px;line-height:1.6}
+.message{min-height:20px;margin-top:10px;font-size:12px;color:var(--ink-muted)}
+.message.error{color:var(--danger-base);font-weight:700}
+.message.ok{color:var(--safe-base);font-weight:700}
+.cal-head{margin-top:24px;margin-bottom:14px}
+.cal-head h2{margin:0;font-size:18px;font-weight:800;color:var(--ink-primary)}
+.cal-head p{margin:4px 0 0;color:var(--ink-muted);font-size:13px}
+.config-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:20px}
+.field label{display:block;color:var(--ink-secondary);font-weight:700;font-size:12px;margin-bottom:8px}
+.field input{
+  border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);
+  padding:11px 14px;
+  width:100%;
+  color:var(--ink-primary);
+  background:#fff;
+  font-size:14px;
+  font-family:var(--font-mono);
+  outline:none;
+  transition:border-color .15s,box-shadow .15s;
+}
+.field input:focus{border-color:var(--blue-brand);box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.settings-bottom{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-top:20px;
+  padding-top:16px;
+  border-top:1px solid var(--border-subtle);
+}
+dialog{border:none;background:transparent;padding:0}
+dialog::backdrop{background:rgba(11,19,41,.6);backdrop-filter:blur(6px)}
+.power-dialog{
+  position:fixed;
+  z-index:2000;
+  inset:84px 20px auto auto;
+  margin:0;
+  width:min(420px,calc(100vw - 32px));
+  max-height:calc(100vh - 100px);
+  overflow-y:auto;
+  border-radius:var(--radius-xl);
+  padding:24px;
+  background:#fff;
+  color:var(--ink-primary);
+  box-shadow:var(--shadow-elevated),0 0 0 1px rgba(0,0,0,.05);
+}
+.power-dialog h2{margin:0 0 8px;font-size:20px;font-weight:850;color:var(--ink-primary)}
+.power-dialog p{color:var(--ink-muted);font-size:13px;line-height:1.6;margin:0}
+.power-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}
+.power-action{border:0;border-radius:var(--radius-md);padding:12px;font-size:13px;font-weight:800;transition:all .15s ease}
+.power-action.action-off{background:var(--danger-base);color:#fff;box-shadow:0 2px 8px rgba(239,68,68,.35)}
+.power-action.action-off:hover:not(:disabled){background:#dc2626}
+.power-action.action-on{background:var(--safe-base);color:#fff;box-shadow:0 2px 8px rgba(16,185,129,.35)}
+.power-action.action-on:hover:not(:disabled){background:#059669}
+.history-dialog{
+  position:fixed;
+  z-index:2000;
+  inset:84px 20px auto auto;
+  margin:0;
+  width:min(520px,calc(100vw - 32px));
+  max-height:calc(100vh - 100px);
+  border-radius:var(--radius-xl);
+  padding:0;
+  background:#fff;
+  color:var(--ink-primary);
+  box-shadow:var(--shadow-elevated),0 0 0 1px rgba(0,0,0,.05);
+  overflow:hidden;
+}
+.history-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  padding:20px 24px;
+  border-bottom:1px solid var(--border-subtle);
+  background:#f8fafc;
+}
+.history-head h2{margin:0;font-size:18px;font-weight:850;color:var(--ink-primary)}
+.history-head p{margin:4px 0 0;color:var(--ink-muted);font-size:12px}
+.history-close{
+  width:32px;
+  height:32px;
+  border:1px solid var(--border-subtle);
+  border-radius:var(--radius-sm);
+  background:#fff;
+  color:var(--ink-secondary);
+  font-size:18px;
+  display:grid;
+  place-items:center;
+  line-height:1;
+  transition:all .15s ease;
+}
+.history-close:hover{background:#f1f5f9;color:var(--ink-primary)}
+.history-list{max-height:calc(100vh - 220px);overflow-y:auto;padding:8px 12px 14px}
+.history-empty{padding:36px 16px;text-align:center;color:var(--ink-muted);font-size:13px}
+.history-item{
+  width:100%;
+  display:block;
+  padding:14px;
+  text-align:left;
+  border:0;
+  border-bottom:1px solid var(--border-subtle);
+  background:#fff;
+  border-radius:var(--radius-md);
+  color:inherit;
+  transition:background .15s ease;
+}
+.history-item:last-child{border-bottom:0}
+.history-item:not(:disabled):hover{background:#f8fafc}
+.history-item-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.history-item-head strong{font-size:13px;font-weight:800;color:var(--ink-primary)}
+.history-kind{padding:3px 8px;border-radius:var(--radius-full);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.history-kind.safe{background:var(--safe-surface);color:var(--safe-text)}
+.history-kind.warning{background:var(--warn-surface);color:var(--warn-text)}
+.history-kind.critical{background:var(--danger-surface);color:var(--danger-text)}
+.history-kind.fault{background:#f1f5f9;color:var(--ink-secondary)}
+.history-item time{display:block;margin-top:4px;color:var(--ink-light);font-size:11px;font-family:var(--font-mono)}
+.history-item-description{display:block;margin-top:6px;color:var(--ink-secondary);font-size:12px;line-height:1.5}
+.notification-slot{display:contents}
+.toast{
+  position:fixed;
+  top:84px;
+  right:20px;
+  z-index:3000;
+  width:min(400px,calc(100vw - 32px));
+  margin:0;
+  display:flex;
+  align-items:flex-start;
+  gap:14px;
+  padding:14px 16px;
+  background:#fff;
+  border:1px solid var(--border-card);
+  border-left:5px solid var(--blue-brand);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-elevated),0 0 0 1px rgba(0,0,0,.05);
+  opacity:0;
+  transform:translateY(-12px);
+  transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.56,.64,1);
+}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.safe{border-left-color:var(--safe-base)}
+.toast.warning{border-left-color:var(--warn-base)}
+.toast.critical{border-left-color:var(--danger-base)}
+.toast.fault{border-left-color:var(--ink-muted)}
+.toast-icon{
+  width:34px;
+  height:34px;
+  flex:none;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:var(--blue-soft);
+  color:var(--blue-brand);
+  font-weight:900;
+  font-size:14px;
+}
+.toast.safe .toast-icon{background:var(--safe-surface);color:var(--safe-base)}
+.toast.warning .toast-icon{background:var(--warn-surface);color:var(--warn-base)}
+.toast.critical .toast-icon{background:var(--danger-surface);color:var(--danger-base)}
+.toast.fault .toast-icon{background:#f1f5f9;color:var(--ink-secondary)}
+.toast-main{flex:1;min-width:0;display:flex;align-items:flex-start;gap:12px;padding:0;border:0;background:transparent;text-align:left;color:inherit}
+.toast-copy strong{display:block;color:var(--ink-primary);font-size:14px;font-weight:800;margin-bottom:2px}
+.toast-copy span{display:block;color:var(--ink-secondary);font-size:12px;line-height:1.5}
+.toast-close{border:0;background:transparent;color:var(--ink-light);font-size:22px;line-height:1;padding:0 2px;cursor:pointer;transition:color .15s}
+.toast-close:hover{color:var(--ink-primary)}
+.toast[hidden]{display:none}
+.footer{flex:none;width:100%;background:var(--navy-dark);color:#94a3b8;border-top:1px solid rgba(255,255,255,.08)}
+.footer-inner{
+  max-width:1600px;
+  margin:0 auto;
+  padding:14px clamp(16px,3vw,32px);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.footer-brand strong{color:#fff;font-size:11px;letter-spacing:.8px}
+.footer-brand span{color:#64748b;font-size:11px}
+.preview{background:#fef3c7;color:#92400e;font-size:12px;font-weight:700;padding:8px 16px;text-align:center;border-bottom:1px solid #fde68a}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:1024px){
+  .app-shell{grid-template-columns:220px minmax(0,1fr)}
+  .cols,.lower{grid-template-columns:1fr}
+  .sensors{grid-template-columns:repeat(2,1fr)}
+  .config-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:768px){
+  .app-shell{display:grid;grid-template-columns:minmax(0,1fr)}
+  .sidebar{position:static;border-right:0;border-bottom:1px solid var(--border-subtle);padding:8px 12px}
+  .sidebar-head,.sidebar-note{display:none}
+  .side-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .side-link{justify-content:center;flex-direction:column;gap:3px;padding:8px 4px;font-size:11px;text-align:center}
+  .side-link[aria-pressed="true"]{box-shadow:inset 0 -3px 0 var(--blue-brand)}
+  .nav{padding:10px 14px}
+  .brand strong{font-size:16px}
+  .brand-badge{display:none}
+  .header-tools{gap:6px}
+  .clock{display:none}
+  main{padding:18px 14px 28px}
+  .sensors{gap:10px}
+  .status-card,.level-card{min-height:240px;padding:18px}
+  .tank{height:140px;width:115px}
+}
+@media(max-width:480px){
+  .header-tools{gap:4px}
+  .power-source-toggle{padding:5px 8px;font-size:11px}
+  .power-source-toggle #powerToggleState{display:none}
+  .alert-sound-button,.notification-button{width:34px;height:34px}
+  .sensors{grid-template-columns:1fr}
+  .config-grid{grid-template-columns:1fr}
+  .power-dialog,.history-dialog{inset:68px 10px auto;width:calc(100vw - 20px)}
 }
 @media(prefers-reduced-motion:reduce){
- html{scroll-behavior:auto}
- *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
-}
-.sidebar-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.sidebar-head .sidebar-label{padding-bottom:0}.sidebar-menu-toggle{width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--line);border-radius:11px;background:#fff;color:#52647c}.sidebar-menu-toggle:hover{background:#f1f5fb;color:#245fc9}.sidebar-menu-toggle svg{width:19px;height:19px}.sidebar-toggle-text,.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.app-shell{transition:grid-template-columns .2s ease}.app-shell.sidebar-collapsed{grid-template-columns:76px minmax(0,1fr)}.sidebar-collapsed .sidebar{align-items:center;padding-right:10px;padding-left:10px}.sidebar-collapsed .sidebar-head{width:100%;justify-content:center}.sidebar-collapsed .sidebar-label,.sidebar-collapsed .sidebar-note,.sidebar-collapsed .side-link span:last-child{display:none}.sidebar-collapsed .side-link{justify-content:center;padding-right:5px;padding-left:5px}.sidebar-collapsed .side-icon{width:auto}
-.connection-clock{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:122px}.connection-clock .clock{text-align:center}.dot.on{animation:connection-pulse 1.4s ease-in-out infinite}.dot.offline{background:#e16a73;box-shadow:0 0 0 4px #e16a7324}@keyframes connection-pulse{0%,100%{box-shadow:0 0 0 3px #4cddaf28}50%{box-shadow:0 0 0 7px #4cddaf08}}
-.power-source-toggle{display:flex;align-items:center;gap:9px;min-height:42px;padding:7px 11px;border:1px solid #39516c;border-radius:12px;background:#1a3152;color:#d2e3fb;font-size:12px;font-weight:700;white-space:nowrap}.power-source-toggle:hover:not(:disabled){background:#254368}.power-source-toggle:focus-visible{outline:3px solid #8bb5ff;outline-offset:2px}.power-source-toggle[aria-pressed="true"]{border-color:#3a967b}.power-switch-track{width:34px;height:20px;position:relative;flex:none;border-radius:20px;background:#65748b;transition:background .18s}.power-switch-track:after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .18s}.power-source-toggle[aria-pressed="true"] .power-switch-track{background:#23aa7c}.power-source-toggle[aria-pressed="true"] .power-switch-track:after{transform:translateX(14px)}.power-source-toggle:disabled{cursor:not-allowed;opacity:.55}
-.alert-sound-button{position:relative;width:42px;height:42px;display:grid;place-items:center;border:1px solid #39516c;border-radius:12px;background:#1a3152;color:#d2e3fb}.alert-sound-button:hover{background:#254368}.alert-sound-button svg{width:20px;height:20px}.alert-sound-button .sound-waves{display:none}.alert-sound-button.sound-on .sound-waves{display:block}.alert-sound-button.sound-on .sound-muted{display:none}
-@media(max-width:680px){
- .sidebar{align-items:stretch}
- .sidebar-head{min-height:44px}
- .sidebar-head .sidebar-label{display:none}
- .sidebar-menu-toggle{width:100%;height:44px;display:flex;justify-content:flex-start;gap:10px;padding:0 12px}
- .sidebar-toggle-text{position:static;width:auto;height:auto;margin:0;clip:auto;overflow:visible;white-space:nowrap;font-size:13px;font-weight:700}
- .sidebar-collapsed .sidebar-head{justify-content:flex-start}
- .sidebar-collapsed .side-nav{display:none}
- .sidebar-collapsed .sidebar-menu-toggle{justify-content:flex-start}
- .header-tools{flex-wrap:wrap}
- .alert-sound-button{width:38px;height:38px;flex:none}
- .power-source-toggle{min-height:38px;gap:6px;padding:6px 8px;font-size:11px}
-}
-.header-tools{flex:0 0 auto;min-width:0;margin-left:auto;justify-content:flex-end;gap:5px}
-.connection-clock{min-width:108px;align-items:flex-end;gap:4px;flex:none}
-.connection-clock .clock{min-width:0;text-align:right}
-.power-source-toggle{min-height:36px;gap:6px;padding:6px 9px;border-radius:10px;font-size:11px}
-.power-switch-track{width:30px;height:18px}
-.power-switch-track:after{width:12px;height:12px}
-.power-source-toggle[aria-pressed="true"] .power-switch-track:after{transform:translateX(12px)}
-.alert-sound-button,.notification-button{width:36px;height:36px;border-radius:10px}
-.alert-sound-button svg,.notification-button svg{width:18px;height:18px}
-@media(max-width:680px){
- .header-tools{display:flex;width:100%;justify-content:flex-end;gap:8px;flex-wrap:nowrap}
- .connection-clock{min-width:0;justify-self:end}
- .connection-clock .clock{text-align:right}
- .alert-sound-button,.notification-button{width:36px;height:36px}
-}
-@media(max-width:400px){
- .header-tools{gap:5px}
- .power-source-toggle{min-height:34px;gap:4px;padding:5px 6px;font-size:10px}
- #powerToggleState{display:none}
- .power-switch-track{width:26px;height:16px}
- .power-switch-track:after{width:10px;height:10px}
- .power-source-toggle[aria-pressed="true"] .power-switch-track:after{transform:translateX(10px)}
- .alert-sound-button,.notification-button{width:32px;height:32px}
- .alert-sound-button svg,.notification-button svg{width:16px;height:16px}
- .connection-clock{min-width:0}
- .clock strong{font-size:12px}
- .clock small{font-size:9px}
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
 </style>
 </head>
 <body>
 <div class="preview" id="previewBanner" style="display:none">Sample screen only. These are not live readings.</div>
-<dialog class="power-dialog" id="powerDialog" aria-labelledby="powerDialogTitle" aria-describedby="powerDialogDescription"><h2 id="powerDialogTitle">Water warning</h2><p id="powerDialogDescription"></p><div class="power-actions"><button class="power-action action-off" id="powerOffButton" type="button" aria-label="Turn Power Source off">OFF</button><button class="power-action action-on" id="powerOnButton" type="button" aria-label="Turn Power Source on">ON</button></div></dialog>
-<dialog class="history-dialog" id="notificationHistory" aria-labelledby="historyTitle"><div class="history-head"><div><h2 id="historyTitle">Alerts</h2><p id="historySummary">No alerts yet</p></div><button class="history-close" id="historyClose" type="button" aria-label="Close alerts">&times;</button></div><div class="history-list" id="notificationHistoryList" aria-live="polite"><div class="history-empty">No alerts yet. New alerts will show here.</div></div></dialog>
-<header><div class="nav"><div class="brand"><div class="logo">≋</div><div><strong>S.E.C.U.R.E</strong><small>Water level</small></div></div><div class="header-tools"><button class="power-source-toggle" id="powerSourceToggle" type="button" aria-label="Power Source is off" aria-pressed="false" disabled><span>Power Source</span><span class="power-switch-track" aria-hidden="true"></span><span id="powerToggleState">Off</span></button><span class="sr-only" id="powerToggleMessage" role="status" aria-live="polite"></span><button class="alert-sound-button" id="alertSoundButton" type="button" aria-label="Turn on alert sound" aria-pressed="false" title="Turn on alert sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path class="sound-waves" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="sound-muted" d="m16 9 5 6m0-6-5 6"/></svg></button><span class="sr-only" id="alertSoundStatus" role="status" aria-live="polite">Sound is off. Tap the sound button to enable alert sounds.</span><button class="notification-button" id="notificationButton" type="button" aria-label="Alerts: 0" title="Show alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg><span class="notification-count" id="notificationCount" hidden>0</span></button><div class="connection-clock" role="status" aria-label="Connection status and local date and time"><span class="dot" id="linkDot" aria-label="Connecting"></span><div class="clock" aria-label="Local date and time"><strong id="clockTime">--:-- --</strong><small id="clockDate">Loading date...</small></div></div></div></div></header>
-<div class="notification-slot"><aside class="toast" id="statusToast" aria-live="polite" aria-atomic="true" hidden><button class="toast-main" id="toastDetails" type="button" disabled><span class="toast-icon" id="toastIcon">!</span><span class="toast-copy"><strong id="toastTitle"></strong><span id="toastMessage"></span></span></button><button class="toast-close" id="toastClose" type="button" aria-label="Close notification">&times;</button></aside></div>
-<div class="app-shell" id="appShell">
-<aside class="sidebar"><div class="sidebar-head"><div class="sidebar-label">MENU</div><button class="sidebar-menu-toggle" id="menuToggle" type="button" aria-label="Collapse menu" aria-expanded="true" aria-controls="sideNav" title="Collapse menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="sidebar-toggle-text">Hide menu</span></button></div><nav class="side-nav" id="sideNav" aria-label="Main menu"><button class="side-link" type="button" data-view="dashboardView" aria-controls="dashboardView" aria-pressed="true"><span class="side-icon" aria-hidden="true">⌂</span><span>Home</span></button><button class="side-link" type="button" data-view="monitoringView" aria-controls="monitoringView" aria-pressed="false"><span class="side-icon" aria-hidden="true">◉</span><span>Water history</span></button><button class="side-link" type="button" data-view="settingsView" aria-controls="settingsView" aria-pressed="false"><span class="side-icon" aria-hidden="true">⚙</span><span>Settings</span></button></nav><div class="sidebar-note">Water readings update while you move between pages.</div></aside>
-<main>
-<section class="app-view" id="dashboardView">
-<div class="pagehead"><div><div class="eyebrow">Water level</div><h1>Water right now</h1><p class="sub">See how high the water is. A smaller distance means the water is closer.</p></div><div class="updated" id="updated">Waiting for readings...</div></div>
-<div class="cols">
- <section class="card status-card"><div><div class="card-title">WATER LEVEL</div><div class="status-title offline" id="mainStatus">Getting readings...</div><p class="status-desc" id="mainDescription">Getting the latest water reading.</p></div><div class="condition" id="condition">Checking water reader...</div></section>
- <section class="card level-card"><div><p class="card-title">WATER IS THIS FAR BELOW THE DANGER LEVEL</p><div class="metric"><strong id="level">—</strong><span>centimeters</span></div><div class="helper" id="levelNote">The smaller the number, the closer the water is to the device.</div><div class="mini"><div><span>Water rise estimate</span><b id="height">—</b></div><div><span>Tank level</span><b id="distance">—</b></div></div></div><div class="tank" role="img" aria-label="Picture showing how high the water is"><div class="tank-water" id="tankWater"></div><div class="tank-text" id="tankText">—</div></div></section>
+<dialog class="power-dialog" id="powerDialog" aria-labelledby="powerDialogTitle" aria-describedby="powerDialogDescription">
+  <h2 id="powerDialogTitle">Water warning</h2>
+  <p id="powerDialogDescription"></p>
+  <div class="power-actions">
+    <button class="power-action action-off" id="powerOffButton" type="button" aria-label="Turn Power Source off">TURN OFF</button>
+    <button class="power-action action-on" id="powerOnButton" type="button" aria-label="Turn Power Source on">TURN ON</button>
+  </div>
+</dialog>
+<dialog class="history-dialog" id="notificationHistory" aria-labelledby="historyTitle">
+  <div class="history-head">
+    <div>
+      <h2 id="historyTitle">Alerts</h2>
+      <p id="historySummary">No alerts yet</p>
+    </div>
+    <button class="history-close" id="historyClose" type="button" aria-label="Close alerts">&times;</button>
+  </div>
+  <div class="history-list" id="notificationHistoryList" aria-live="polite">
+    <div class="history-empty">No alerts yet. New alerts will show here.</div>
+  </div>
+</dialog>
+<header>
+  <div class="nav">
+    <div class="brand">
+      <div class="logo">≋</div>
+      <div class="brand-copy">
+        <strong>S.E.C.U.R.E APPLICATION <span class="brand-badge">Device AP</span></strong>
+        <small>WATER LEVEL MONITORING SYSTEM</small>
+      </div>
+    </div>
+    <div class="header-tools">
+      <button class="power-source-toggle" id="powerSourceToggle" type="button" aria-label="Power Source is off" aria-pressed="false" disabled>
+        <span>Power Source</span>
+        <span class="power-switch-track" aria-hidden="true"></span>
+        <span id="powerToggleState">Off</span>
+      </button>
+      <span class="sr-only" id="powerToggleMessage" role="status" aria-live="polite"></span>
+      <button class="alert-sound-button" id="alertSoundButton" type="button" aria-label="Turn on alert sound" aria-pressed="false" title="Turn on alert sound">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
+          <path class="sound-waves" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>
+          <path class="sound-muted" d="m16 9 5 6m0-6-5 6"/>
+        </svg>
+      </button>
+      <span class="sr-only" id="alertSoundStatus" role="status" aria-live="polite">Sound is off. Tap the sound button to enable alert sounds.</span>
+      <button class="notification-button" id="notificationButton" type="button" aria-label="Alerts: 0" title="Show alerts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
+          <path d="M10 21h4"/>
+        </svg>
+        <span class="notification-count" id="notificationCount" hidden>0</span>
+      </button>
+      <div class="connection-clock" role="status" aria-label="Connection status and local date and time">
+        <span class="dot" id="linkDot" aria-label="Connecting"></span>
+        <div class="clock" aria-label="Local date and time">
+          <strong id="clockTime">--:-- --</strong>
+          <small id="clockDate">Loading date...</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="notification-slot">
+  <aside class="toast" id="statusToast" aria-live="polite" aria-atomic="true" hidden>
+    <button class="toast-main" id="toastDetails" type="button" disabled>
+      <span class="toast-icon" id="toastIcon">!</span>
+      <span class="toast-copy">
+        <strong id="toastTitle"></strong>
+        <span id="toastMessage"></span>
+      </span>
+    </button>
+    <button class="toast-close" id="toastClose" type="button" aria-label="Close notification">&times;</button>
+  </aside>
 </div>
-<div class="stats-title"><h2>More details</h2><span>Updates every second</span></div>
-<div class="sensors"><div class="sensor"><small>Water reader</small><strong id="ultraHealth">Checking</strong><div class="secondary">Checks water level</div></div><div class="sensor"><small>Estimated water rise</small><strong id="heightCard">—</strong><div class="secondary">Compared with an empty tank</div></div><div class="sensor"><small>Water distance</small><strong id="distanceCard">—</strong><div class="secondary">Below the device</div></div><div class="sensor"><small>Water level</small><strong id="alertLevel">—</strong><div class="secondary">Based on distance</div></div></div>
- </section>
-<section class="app-view" id="monitoringView" hidden>
-<div class="pagehead"><div><div class="eyebrow">Past readings</div><h1>Water history</h1><p class="sub">See how the water level has changed and when the alarm sounded.</p></div></div>
-<div class="lower"><section class="card"><div class="charthead"><b>Water level over time</b><span>Last 60 readings</span></div><canvas id="trend" aria-label="Water level history chart"></canvas><div class="hint" style="margin-top:14px">The chart shows how far the water is below the device, in centimeters. It keeps up to 60 readings and clears when you close this page.</div></section><section class="card"><div class="charthead"><b>Lights and sound</b><span>Right now</span></div><div class="ledrow"><div class="lightbox"><span class="led green" id="ledGreen"></span><b>Water is safe</b></div><div class="lightbox"><span class="led yellow" id="ledYellow"></span><b>Water is rising</b></div><div class="lightbox"><span class="led red" id="ledRed"></span><b>Water is too high</b></div></div><div class="hrow"><span>Power Source indicator</span><strong id="monitorLoadLed">—</strong></div><div class="hrow"><span>Alarm sound</span><strong id="buzzer">—</strong></div><div class="hrow"><span>Alarm sound style</span><strong id="buzzerMode">—</strong></div><div class="hrow"><span>Water change to record</span><strong id="changeAlerts">—</strong></div><div class="hrow"><span>Last water change</span><strong id="changeDelta">—</strong></div><div class="hrow"><span>Changes recorded</span><strong id="changeCount">0</strong></div><div class="hrow"><span>Phones connected</span><strong id="clients">—</strong></div><div class="hrow"><span>Time since start</span><strong id="uptime">—</strong></div><div class="test-panel"><div class="field" style="margin-bottom:12px"><label for="driverMode">Choose your alarm</label><select id="driverMode" class="driver-select"><option value="active">Alarm that makes its own sound</option><option value="passive">Alarm that needs the device to make sound</option></select></div><button class="btn" type="button" id="applyBuzzerModeBtn" style="margin-right:7px">Save choice</button><button class="btn" type="button" id="testBuzzerBtn">Test alarm sound</button><div class="hint">Choose the option that matches your alarm. The alarm sounds when the water is rising or too high. If you hear nothing during the test, check the connections.</div><div id="buzzerTestMessage" class="message" aria-live="polite"></div></div></section></div>
- </section>
-<section class="app-view" id="settingsView" hidden>
-<div class="pagehead"><div><div class="eyebrow">Water settings</div><h1>Settings</h1><p class="sub">See when the water is safe, rising, or too high.</p></div></div>
-<div class="cal-head"><div><h2>When do alerts happen?</h2><p>The device measures how far the water is below it. A smaller number means the water is higher.</p></div></div>
-<section class="card"><div class="hrow"><span>Water is safe</span><strong>11 centimeters or more below the device</strong></div><div class="hrow"><span>Water is rising — slow beeps</span><strong>7 to under 11 centimeters below the device</strong></div><div class="hrow"><span>Water is too high — fast beeps</span><strong>Less than 7 centimeters below the device</strong></div><div class="hrow"><span>No reading</span><strong>The reader cannot see the water</strong></div><div class="hrow"><span>Power Source indicator when water is safe</span><strong>Turns on by itself, unless turned off after a high-water alert</strong></div><div class="hrow"><span>Power Source indicator when water is rising</span><strong>Keeps its current setting</strong></div><div class="hrow"><span>Power Source indicator when water is too high</span><strong>Turns off by itself</strong></div><div class="hrow"><span>Power Source indicator when there is no reading</span><strong>Keeps its current setting</strong></div><p class="hint" style="margin:15px 0">The reader may not work when the water is very close. Keep the device dry and check it often. Do not use it as your only flood warning.</p><form id="configForm"><div class="config-grid"><div class="field"><label for="changeCm">Smallest water change to record (centimeters)</label><input id="changeCm" name="changeCm" type="number" min="0.5" max="20" step="0.5" required placeholder="1"></div></div><div class="settings-bottom"><div class="hint">Choose how much the water must move before the change is saved. This does not change when the alarm sounds.</div><button class="btn" id="saveBtn" type="submit">Save setting</button></div><div class="message" id="saveMessage" aria-live="polite"></div></form></section>
- </section>
-</main></div><footer class="footer">The Power Source switch controls the device indicator only. It cannot turn off power to your home. Keep the device dry. Do not use it as your only flood warning.</footer>
+<div class="app-shell" id="appShell">
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <div class="sidebar-label">Navigation</div>
+      <button class="sidebar-menu-toggle" id="menuToggle" type="button" aria-label="Collapse menu" aria-expanded="true" aria-controls="sideNav" title="Collapse menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+        <span class="sidebar-toggle-text sr-only">Hide menu</span>
+      </button>
+    </div>
+    <nav class="side-nav" id="sideNav" aria-label="Main menu">
+      <button class="side-link" type="button" data-view="dashboardView" aria-controls="dashboardView" aria-pressed="true">
+        <span class="side-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </span>
+        <span>Home</span>
+      </button>
+      <button class="side-link" type="button" data-view="monitoringView" aria-controls="monitoringView" aria-pressed="false">
+        <span class="side-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </span>
+        <span>Water history</span>
+      </button>
+      <button class="side-link" type="button" data-view="settingsView" aria-controls="settingsView" aria-pressed="false">
+        <span class="side-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </span>
+        <span>Settings</span>
+      </button>
+    </nav>
+    <div class="sidebar-note">Direct local ESP32 telemetry updates in real-time.</div>
+  </aside>
+
+  <main>
+    <section class="app-view" id="dashboardView">
+      <div class="pagehead">
+        <div>
+          <div class="eyebrow">Water Level Telemetry</div>
+          <h1>Current Water Status</h1>
+          <p class="sub">Continuous ultrasonic clearance and tank capacity monitoring. Smaller distance indicates rising water.</p>
+        </div>
+        <div class="updated" id="updated">Waiting for readings...</div>
+      </div>
+
+      <div class="cols">
+        <section class="card status-card">
+          <div>
+            <div class="card-title">WATER LEVEL ASSESSMENT</div>
+            <div class="status-title offline" id="mainStatus">Getting readings...</div>
+            <p class="status-desc" id="mainDescription">Awaiting fresh sensor telemetry from the monitoring station.</p>
+          </div>
+          <div class="condition" id="condition">Checking water reader...</div>
+        </section>
+
+        <section class="card level-card">
+          <div class="level-meta">
+            <p class="card-title">SURFACE CLEARANCE TO SENSOR</p>
+            <div class="metric">
+              <strong id="level">—</strong>
+              <span>centimeters</span>
+            </div>
+            <div class="helper" id="levelNote">The smaller the number, the closer the water is to the device.</div>
+            <div class="mini">
+              <div>
+                <span>Water rise estimate</span>
+                <b id="height">—</b>
+              </div>
+              <div>
+                <span>Tank capacity level</span>
+                <b id="distance">—</b>
+              </div>
+            </div>
+          </div>
+          <div class="tank" role="img" aria-label="Real-time water reservoir visualizer">
+            <div class="tank-water" id="tankWater"></div>
+            <div class="tank-text" id="tankText">—</div>
+          </div>
+        </section>
+      </div>
+
+      <div class="stats-title">
+        <h2>Hardware Diagnostics &amp; Metrics</h2>
+        <span>Real-time Telemetry</span>
+      </div>
+
+      <div class="sensors">
+        <div class="sensor">
+          <small>Ultrasonic Sensor</small>
+          <strong id="ultraHealth">Checking</strong>
+          <div class="secondary">Real-time transducer status</div>
+        </div>
+        <div class="sensor">
+          <small>Water Rise Surge</small>
+          <strong id="heightCard">—</strong>
+          <div class="secondary">Relative to dry tank baseline</div>
+        </div>
+        <div class="sensor">
+          <small>Clearance Distance</small>
+          <strong id="distanceCard">—</strong>
+          <div class="secondary">Headroom below sensor</div>
+        </div>
+        <div class="sensor">
+          <small>Threat Classification</small>
+          <strong id="alertLevel">—</strong>
+          <div class="secondary">Dynamic risk evaluation</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="app-view" id="monitoringView" hidden>
+      <div class="pagehead">
+        <div>
+          <div class="eyebrow">Telemetry Analytics</div>
+          <h1>Water Level History</h1>
+          <p class="sub">Historical trend telemetry, indicator light states, and hardware switchgear.</p>
+        </div>
+      </div>
+
+      <div class="lower">
+        <section class="card">
+          <div class="charthead">
+            <b>Water Level Over Time</b>
+            <span>Last 60 readings</span>
+          </div>
+          <canvas id="trend" aria-label="Water level history chart"></canvas>
+          <div class="hint" style="margin-top:14px">The chart displays clearance distance below the sensor in centimeters. Buffer holds up to 60 telemetry points.</div>
+        </section>
+
+        <section class="card">
+          <div class="charthead">
+            <b>Hardware Indicators &amp; Annunciator</b>
+            <span>Current State</span>
+          </div>
+          <div class="ledrow">
+            <div class="lightbox"><span class="led green" id="ledGreen"></span><b>Water is safe</b></div>
+            <div class="lightbox"><span class="led yellow" id="ledYellow"></span><b>Water is rising</b></div>
+            <div class="lightbox"><span class="led red" id="ledRed"></span><b>Water is too high</b></div>
+          </div>
+
+          <div class="hrow"><span>Power Source indicator</span><strong id="monitorLoadLed">—</strong></div>
+          <div class="hrow"><span>Alarm sound</span><strong id="buzzer">—</strong></div>
+          <div class="hrow"><span>Alarm sound style</span><strong id="buzzerMode">—</strong></div>
+          <div class="hrow"><span>Water change to record</span><strong id="changeAlerts">—</strong></div>
+          <div class="hrow"><span>Last water change</span><strong id="changeDelta">—</strong></div>
+          <div class="hrow"><span>Changes recorded</span><strong id="changeCount">0</strong></div>
+          <div class="hrow"><span>Phones connected</span><strong id="clients">—</strong></div>
+          <div class="hrow"><span>System uptime</span><strong id="uptime">—</strong></div>
+
+          <div class="test-panel">
+            <div class="field" style="margin-bottom:12px">
+              <label for="driverMode">Choose your alarm</label>
+              <select id="driverMode" class="driver-select">
+                <option value="active">Alarm that makes its own sound</option>
+                <option value="passive">Alarm that needs the device to make sound</option>
+              </select>
+            </div>
+            <button class="btn" type="button" id="applyBuzzerModeBtn" style="margin-right:7px">Save choice</button>
+            <button class="btn" type="button" id="testBuzzerBtn">Test alarm sound</button>
+            <div class="hint">Choose the option that matches your alarm. The alarm sounds when the water is rising or too high. If you hear nothing during the test, check the connections.</div>
+            <div id="buzzerTestMessage" class="message" aria-live="polite"></div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="app-view" id="settingsView" hidden>
+      <div class="pagehead">
+        <div>
+          <div class="eyebrow">System Calibration</div>
+          <h1>Settings &amp; Thresholds</h1>
+          <p class="sub">Threshold rules and telemetry recording sensitivity configuration.</p>
+        </div>
+      </div>
+
+      <div class="cal-head">
+        <div>
+          <h2>Threshold Rules Matrix</h2>
+          <p>Sensor measures air gap clearance below the device. Smaller numbers represent higher water levels.</p>
+        </div>
+      </div>
+
+      <section class="card">
+        <div class="hrow"><span>Water is safe</span><strong>11 centimeters or more below the device</strong></div>
+        <div class="hrow"><span>Water is rising — slow beeps</span><strong>7 to under 11 centimeters below the device</strong></div>
+        <div class="hrow"><span>Water is too high — fast beeps</span><strong>Less than 7 centimeters below the device</strong></div>
+        <div class="hrow"><span>No reading</span><strong>The reader cannot see the water</strong></div>
+        <div class="hrow"><span>Power Source indicator when water is safe</span><strong>Turns on by itself, unless turned off after a high-water alert</strong></div>
+        <div class="hrow"><span>Power Source indicator when water is rising</span><strong>Keeps its current setting</strong></div>
+        <div class="hrow"><span>Power Source indicator when water is too high</span><strong>Turns off by itself</strong></div>
+        <div class="hrow"><span>Power Source indicator when there is no reading</span><strong>Keeps its current setting</strong></div>
+
+        <form id="configForm">
+          <div class="config-grid">
+            <div class="field">
+              <label for="changeCm">Smallest water change to record (centimeters)</label>
+              <input id="changeCm" name="changeCm" type="number" min="0.5" max="20" step="0.5" required placeholder="1">
+            </div>
+          </div>
+          <div class="settings-bottom">
+            <div class="hint">Choose how much the water must move before the change is saved. This does not change when the alarm sounds.</div>
+            <button class="btn" id="saveBtn" type="submit">Save setting</button>
+          </div>
+          <div class="message" id="saveMessage" aria-live="polite"></div>
+        </form>
+      </section>
+    </section>
+  </main>
+</div>
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <strong>S.E.C.U.R.E APPLICATION</strong>
+      <span>Water Level Monitoring &amp; Telemetry System</span>
+    </div>
+  </div>
+</footer>
 <script>
 const el=id=>document.getElementById(id);
+const buzzerPanel=document.querySelector('.test-panel');
+buzzerPanel.querySelector('.field').hidden=true;
+buzzerPanel.querySelector('#applyBuzzerModeBtn').hidden=true;
+buzzerPanel.querySelector('#testBuzzerBtn').hidden=true;
+buzzerPanel.querySelector('.hint').hidden=true;
+buzzerPanel.querySelector('#buzzerTestMessage').hidden=true;
+el('buzzerMode').closest('.hrow').style.display='none';
+const buzzerToggleUi=document.createElement('div');
+buzzerToggleUi.innerHTML='<div class="buzzer-toggle-ui"><div class="buzzer-toggle-copy"><strong>Alarm control</strong><span>Enable the buzzer for WARNING and CRITICAL alerts.</span></div><button class="buzzer-toggle-button" id="buzzerToggleBtn" type="button" aria-label="Buzzer enabled" aria-pressed="true"><span class="buzzer-toggle-track" aria-hidden="true"></span><span id="buzzerToggleState">On</span></button></div><div class="buzzer-toggle-message" id="buzzerToggleMessage" role="status" aria-live="polite"></div>';
+buzzerPanel.prepend(buzzerToggleUi);
 const preview=location.protocol==='file:';
 let alertAudioContext=null,alertSoundEnabled=false;
 el('menuToggle').addEventListener('click',()=>{
@@ -315,8 +1475,9 @@ document.querySelectorAll('.side-link').forEach(button=>button.addEventListener(
  document.querySelectorAll('.side-link').forEach(link=>link.setAttribute('aria-pressed',String(link===button)));
  if(viewId==='monitoringView')draw();
 }));
-let samples=[],formLoaded=false,polling=false,previewTick=0,previewLedOn=false,lastStatus=null,lastLedState=null,toastTimer=0,toastHideTimer=0,notificationsReceived=0,lastNotification=null,notificationHistory=[];
+let samples=[],formLoaded=false,polling=false,previewTick=0,previewLedOn=false,lastStatus=null,lastLedState=null,lastBuzzerEnabled=true,toastTimer=0,toastHideTimer=0,notificationsReceived=0,lastNotification=null,notificationHistory=[];
 if(preview){el('previewBanner').style.display='block';el('powerSourceToggle').disabled=true;el('powerOffButton').disabled=true;el('powerOnButton').disabled=true;el('saveBtn').disabled=true;el('testBuzzerBtn').disabled=true;el('applyBuzzerModeBtn').disabled=true;el('saveMessage').textContent='Connect to the device to save this setting.';el('buzzerTestMessage').textContent='Connect to the device to test the alarm.';}
+if(preview)el('buzzerToggleBtn').disabled=true;
 function setLED(id,on){el(id).classList.toggle('on',!!on)}
 function playAlertSound(status){
  if(!alertSoundEnabled||!alertAudioContext||alertAudioContext.state!=='running')return false;
@@ -488,6 +1649,15 @@ el('powerSourceToggle').addEventListener('click',()=>sendLedCommand(lastLedState
 el('powerOffButton').addEventListener('click',()=>sendLedCommand('off'));
 el('powerOnButton').addEventListener('click',()=>sendLedCommand('on'));
 updateClock();setInterval(updateClock,1000);
+const offlineBeforeClearingReadings=offline;
+offline=function(){
+ offlineBeforeClearingReadings();
+ samples.length=0;lastStatus=null;lastLedState=null;
+ el('powerToggleState').textContent='—';el('powerSourceToggle').setAttribute('aria-pressed','false');
+ el('buzzerToggleState').textContent='—';el('buzzerToggleBtn').setAttribute('aria-pressed','false');
+ if(el('powerDialog').open)closePowerDialog();
+ draw();
+};
 function offline(){el('linkDot').classList.remove('on');el('linkDot').classList.add('offline');el('linkDot').setAttribute('aria-label','Not connected');el('updated').textContent='Connection lost';el('mainStatus').textContent='No readings';el('mainStatus').className='status-title offline';el('mainDescription').textContent='Connect your phone to the S.E.C.U.R.E network and open 192.168.4.1.';el('condition').textContent='Water level is not available';el('ultraHealth').textContent='No reading';el('heightCard').textContent='—';el('level').textContent='—';el('tankText').textContent='—';el('tankWater').style.height='0%';el('height').textContent='—';el('distance').textContent='—';el('distanceCard').textContent='—';el('alertLevel').textContent='—';el('buzzer').textContent='—';el('buzzerMode').textContent='—';el('changeAlerts').textContent='—';el('changeDelta').textContent='—';el('changeCount').textContent='—';el('clients').textContent='—';el('uptime').textContent='—';setLED('ledGreen',false);setLED('ledYellow',false);setLED('ledRed',false);el('monitorLoadLed').textContent='—';el('powerSourceToggle').disabled=true;}
 function render(d){el('linkDot').classList.add('on');el('linkDot').classList.remove('offline');el('linkDot').setAttribute('aria-label',preview?'Sample readings':'Connected');el('updated').textContent=(preview?'Updated ':'Updated ')+new Date().toLocaleTimeString();
  const previousStatus=lastStatus;
@@ -521,7 +1691,112 @@ el('height').textContent=d.ultrasonicOk?Number(d.waterHeightCm).toFixed(1)+' cen
 setLED('ledGreen',d.green);setLED('ledYellow',d.yellow);setLED('ledRed',d.red);el('buzzer').textContent=d.buzzer?'On':'Off';el('buzzer').className=d.buzzer?'alarm':'';el('buzzerMode').textContent=d.buzzerType==='passive'?'Needs the device to make sound':'Makes its own sound';el('changeAlerts').textContent=Number(d.changeAlertCm).toFixed(1)+' centimeters';el('changeDelta').textContent=d.lastAlertDeltaCm>=0?Number(d.lastAlertDeltaCm).toFixed(1)+' centimeters · '+(d.lastAlertDirection==='Rising water'?'Water going up':'Water going down'):'Waiting for a change';el('changeCount').textContent=d.distanceChangeAlertCount||0;el('clients').textContent=d.clients;el('uptime').textContent=secs(d.uptime);
 if(!formLoaded){el('changeCm').value=d.changeAlertCm;el('driverMode').value=d.buzzerType;formLoaded=true}
 samples.push(d.ultrasonicOk?d.distanceCm:null);if(samples.length>60)samples.shift();draw();}
-function draw(){const c=el('trend');const r=c.getBoundingClientRect(),w=Math.max(180,r.width),h=Math.max(100,r.height),scale=window.devicePixelRatio||1;c.width=Math.round(w*scale);c.height=Math.round(h*scale);const x=c.getContext('2d');x.scale(scale,scale);const left=27,right=w-9,top=9,bottom=h-19,max=Math.max(16,Math.ceil(Math.max(0,...samples.filter(v=>v!==null&&Number.isFinite(v)))/4)*4);x.strokeStyle='#e7edf5';x.lineWidth=1;x.font='10px Arial';x.fillStyle='#96a4b7';for(let t=0;t<=4;t++){const y=top+(bottom-top)*t/4;x.beginPath();x.moveTo(left,y);x.lineTo(right,y);x.stroke();x.fillText(String(max-t*max/4),2,y+3)}let active=false;const values=samples;values.forEach((v,i)=>{if(v===null||v>max){active=false;return}const xx=left+(right-left)*i/Math.max(59,values.length-1),yy=bottom-(bottom-top)*v/max;if(!active){x.beginPath();x.moveTo(xx,yy);active=true}else x.lineTo(xx,yy);x.strokeStyle='#2b70e9';x.lineWidth=2.6;x.lineJoin='round';x.stroke()});const idx=values.length-1;if(idx>=0&&values[idx]!==null&&values[idx]<=max){const xx=left+(right-left)*idx/Math.max(59,values.length-1),yy=bottom-(bottom-top)*values[idx]/max;x.fillStyle='#2b70e9';x.beginPath();x.arc(xx,yy,3.8,0,2*Math.PI);x.fill()}}
+function draw(){
+ const c=el('trend');
+ if(!c)return;
+ const r=c.getBoundingClientRect(),w=Math.max(180,r.width),h=Math.max(100,r.height),scale=window.devicePixelRatio||1;
+ c.width=Math.round(w*scale);
+ c.height=Math.round(h*scale);
+ const x=c.getContext('2d');
+ x.scale(scale,scale);
+ const left=32,right=w-12,top=12,bottom=h-22;
+ const validSamples=samples.filter(v=>v!==null&&Number.isFinite(v));
+ const max=Math.max(16,Math.ceil(Math.max(0,...validSamples)/4)*4);
+
+ x.strokeStyle='#e2e8f0';
+ x.lineWidth=1;
+ x.font='10px ui-monospace, SFMono-Regular, monospace';
+ x.fillStyle='#94a3b8';
+ for(let t=0;t<=4;t++){
+  const y=top+(bottom-top)*t/4;
+  x.beginPath();
+  x.moveTo(left,y);
+  x.lineTo(right,y);
+  x.stroke();
+  x.fillText(String(max-t*max/4),2,y+3.5);
+ }
+
+ const values=samples;
+ if(values.length>0){
+  const points=[];
+  values.forEach((v,i)=>{
+   if(v===null||v>max)return;
+   const xx=left+(right-left)*i/Math.max(59,values.length-1);
+   const yy=bottom-(bottom-top)*v/max;
+   points.push({x:xx,y:yy});
+  });
+
+  if(points.length>1){
+   const area=x.createLinearGradient(0,top,0,bottom);
+   area.addColorStop(0,'rgba(37, 99, 235, 0.22)');
+   area.addColorStop(1,'rgba(37, 99, 235, 0.0)');
+
+   x.beginPath();
+   x.moveTo(points[0].x,points[0].y);
+   for(let i=1;i<points.length;i++){
+    x.lineTo(points[i].x,points[i].y);
+   }
+   x.lineTo(points[points.length-1].x,bottom);
+   x.lineTo(points[0].x,bottom);
+   x.closePath();
+   x.fillStyle=area;
+   x.fill();
+
+   x.beginPath();
+   x.moveTo(points[0].x,points[0].y);
+   for(let i=1;i<points.length;i++){
+    x.lineTo(points[i].x,points[i].y);
+   }
+   x.strokeStyle='#2563eb';
+   x.lineWidth=2.4;
+   x.lineJoin='round';
+   x.stroke();
+
+   const lastP=points[points.length-1];
+   x.fillStyle='rgba(37, 99, 235, 0.2)';
+   x.beginPath();
+   x.arc(lastP.x,lastP.y,7,0,2*Math.PI);
+   x.fill();
+
+   x.fillStyle='#2563eb';
+   x.beginPath();
+   x.arc(lastP.x,lastP.y,4,0,2*Math.PI);
+   x.fill();
+
+   x.fillStyle='#ffffff';
+   x.beginPath();
+   x.arc(lastP.x,lastP.y,1.8,0,2*Math.PI);
+   x.fill();
+  }
+ }
+}
+async function sendBuzzerCommand(action){
+ if(preview)return;
+ const button=el('buzzerToggleBtn'),message=el('buzzerToggleMessage');
+ button.disabled=true;message.className='buzzer-toggle-message';
+ message.textContent=action==='on'?'Turning the buzzer on...':'Turning the buzzer off...';
+ try{
+  const response=await fetch('/api/buzzer/enabled',{method:'POST',body:new URLSearchParams({enabled:action}),cache:'no-store'});
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw Error(result.error||'Buzzer command was rejected');
+  message.textContent=result.buzzerEnabled?'Buzzer enabled.':'Buzzer disabled.';
+ }catch(error){
+  message.className='buzzer-toggle-message error';
+  message.textContent='Could not change buzzer setting. Check the connection and try again.';
+ }finally{await load();}
+}
+el('buzzerToggleBtn').addEventListener('click',()=>sendBuzzerCommand(lastBuzzerEnabled?'off':'on'));
+const renderWithBuzzerToggle=render;
+render=function(d){
+ renderWithBuzzerToggle(d);
+ lastBuzzerEnabled=typeof d.buzzerEnabled==='boolean'?d.buzzerEnabled:true;
+ el('buzzerToggleBtn').setAttribute('aria-pressed',String(lastBuzzerEnabled));
+ el('buzzerToggleBtn').setAttribute('aria-label','Buzzer '+(lastBuzzerEnabled?'enabled':'disabled')+'. Turn '+(lastBuzzerEnabled?'off':'on')+'.');
+ el('buzzerToggleState').textContent=lastBuzzerEnabled?'On':'Off';
+ el('buzzerToggleBtn').disabled=preview;
+};
+const offlineWithBuzzerToggle=offline;
+offline=function(){offlineWithBuzzerToggle();el('buzzerToggleBtn').disabled=true;};
 function simulated(){previewTick++;const cm=Math.max(2,Math.min(15,8.5+Math.sin(previewTick/6)*6));const state=cm<7?'critical':cm<11?'warning':'safe';if(state==='safe')previewLedOn=true;const p=Math.max(0,Math.min(100,(15-cm)*100/15));return {status:state,ledOn:previewLedOn,ultrasonicOk:true,levelPercent:p,distanceCm:cm,waterHeightCm:15-cm,green:state==='safe',yellow:state==='warning',red:state==='critical',buzzer:state==='warning'||state==='critical',buzzerMode:'Active HIGH',buzzerType:'active',changeAlertCm:1,lastAlertDeltaCm:2.1,lastAlertDistanceCm:cm,lastAlertDirection:'Rising water',lastAlertAgeSec:2,distanceChangeAlertCount:4,buzzerTest:false,clients:1,uptime:previewTick};}
 async function load(){if(polling)return;polling=true;const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),3000);try{if(preview){render(simulated());return}const r=await fetch('/api/status?ts='+Date.now(),{cache:'no-store',signal:ctrl.signal});if(!r.ok)throw Error('ESP32 HTTP '+r.status);const d=await r.json();if(!d.ok)throw Error('Invalid sensor response');render(d)}catch(e){offline()}finally{clearTimeout(timer);polling=false}}
 el('configForm').addEventListener('submit',async ev=>{ev.preventDefault();if(preview)return;const btn=el('saveBtn'),message=el('saveMessage');btn.disabled=true;message.textContent='Saving...';message.className='message';try{const data=new URLSearchParams(new FormData(ev.target));const r=await fetch('/api/config',{method:'POST',body:data});const j=await r.json();if(!r.ok||!j.ok)throw Error(j.error||'The setting could not be saved');message.textContent='Setting saved.';message.className='message ok';await load()}catch(e){message.textContent='Could not save. Check the connection and try again.';message.className='message error'}finally{btn.disabled=false}});
@@ -629,9 +1904,8 @@ void updateStatus() {
     status = "safe";      // 11 cm and farther
   }
 
-  if (status != previous) {
-    statusSinceMs = millis();
-  }
+  if (status != previous) statusSinceMs = millis();
+
   // A CRITICAL transition is an automatic, latched shutdown. Returning to
   // SAFE must not re-enable the LED; only a manual ON command clears the latch.
   if (status == "critical" && previous != "critical") {
@@ -659,14 +1933,13 @@ void updateOutputs() {
   const bool manualTest = buzzerTestUntilMs != 0 &&
                           static_cast<int32_t>(buzzerTestUntilMs - now) > 0;
   if (!manualTest) buzzerTestUntilMs = 0;
-  const uint32_t statusElapsedMs = now - statusSinceMs;
   const bool warningBeep = status == "warning" &&
-                           statusElapsedMs % (WARNING_BUZZER_ON_MS + WARNING_BUZZER_OFF_MS) < WARNING_BUZZER_ON_MS;
+                           (now - statusSinceMs) % (WARNING_BUZZER_PULSE_MS * 2) <
+                               WARNING_BUZZER_PULSE_MS;
   const bool criticalBeep = status == "critical" &&
-                            statusElapsedMs % (CRITICAL_BUZZER_ON_MS + CRITICAL_BUZZER_OFF_MS) < CRITICAL_BUZZER_ON_MS;
-  const bool powerOffDelayElapsed = !loadLedOn && loadLedOffTimerActive &&
-                                    now - loadLedOffSinceMs >= BUZZER_POWER_OFF_DELAY_MS;
-  const bool sound = !powerOffDelayElapsed && (manualTest || warningBeep || criticalBeep);
+                            (now - statusSinceMs) % (CRITICAL_BUZZER_PULSE_MS * 2) <
+                                CRITICAL_BUZZER_PULSE_MS;
+  const bool sound = buzzerEnabled && (warningBeep || criticalBeep || manualTest);
   setBuzzer(sound);
 }
 
@@ -763,6 +2036,7 @@ String buildStatusJson() {
   json += ",\"yellow\":" + String(yellowOn ? "true" : "false");
   json += ",\"red\":" + String(redOn ? "true" : "false");
   json += ",\"buzzer\":" + String(buzzerOn ? "true" : "false");
+  json += ",\"buzzerEnabled\":" + String(buzzerEnabled ? "true" : "false");
   json += ",\"buzzerTest\":" + String(buzzerTestUntilMs != 0 ? "true" : "false");
   json += ",\"buzzerMode\":\"" + String(buzzerMode == PASSIVE_PWM ? "Passive (PWM)" : "Active HIGH") + "\"";
   json += ",\"buzzerType\":\"" + String(buzzerMode == PASSIVE_PWM ? "passive" : "active") + "\"";
@@ -801,31 +2075,27 @@ void applyCloudControlCommand(const String &responseBody) {
 
   const String commandId = cloudJsonStringField(responseBody, "id", commandStart);
   const String action = cloudJsonStringField(responseBody, "action", commandStart);
+  const String target = cloudJsonStringField(responseBody, "target", commandStart);
   if (commandId.length() != 36 || (action != "on" && action != "off")) return;
   if (prefs.getString("commandAck", "") == commandId) return;
 
   const bool turnOn = action == "on";
-  loadLedAutoOffLatched = !turnOn;
-  setLoadLed(turnOn);
+  if (target == "buzzer") {
+    buzzerEnabled = turnOn;
+    prefs.putBool("buzzerEnabled", buzzerEnabled);
+    updateOutputs();
+  } else {
+    loadLedAutoOffLatched = !turnOn;
+    setLoadLed(turnOn);
+  }
   prefs.putString("commandAck", commandId);
-  Serial.printf("Cloud control command %s acknowledged: GPIO23 %s\n",
-                commandId.c_str(), turnOn ? "ON" : "OFF");
+  Serial.printf("Cloud control command %s acknowledged: %s %s\n",
+                commandId.c_str(), target == "buzzer" ? "buzzer" : "GPIO23",
+                turnOn ? "ON" : "OFF");
 }
 
-void sendCloudTelemetry() {
-  if (strlen(AQUAGUARD_WIFI_SSID) == 0 || strlen(AQUAGUARD_DEVICE_TOKEN) < 32) return;
-
-  const uint32_t now = millis();
-  if (now - lastCloudTelemetryMs < CLOUD_TELEMETRY_INTERVAL_MS) return;
-  lastCloudTelemetryMs = now;
-  const wl_status_t wifiStatus = WiFi.status();
-  if (wifiStatus != WL_CONNECTED) {
-    Serial.printf("Cloud telemetry skipped: router Wi-Fi status %d\n", static_cast<int>(wifiStatus));
-    return;
-  }
-  Serial.printf("Cloud telemetry Wi-Fi connected: IP %s, signal %d dBm\n",
-                WiFi.localIP().toString().c_str(), WiFi.RSSI());
-
+void cloudTelemetryTask(void *parameter) {
+  (void)parameter;
   static const char VERCEL_ROOT_CA[] PROGMEM = R"PEM(
 -----BEGIN CERTIFICATE-----
 MIIFVzCCAz+gAwIBAgINAgPlk28xsBNJiGuiFzANBgkqhkiG9w0BAQwFADBHMQsw
@@ -860,26 +2130,75 @@ bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
 -----END CERTIFICATE-----
 )PEM";
 
-  WiFiClientSecure tlsClient;
-  tlsClient.setCACert(VERCEL_ROOT_CA);
-  HTTPClient http;
-  if (!http.begin(tlsClient, AQUAGUARD_TELEMETRY_URL)) {
-    Serial.println("ERROR: Could not start HTTPS telemetry request");
+  CloudTelemetryRequest request;
+  for (;;) {
+    if (xQueueReceive(cloudTelemetryQueue, &request, portMAX_DELAY) != pdTRUE) continue;
+
+    const wl_status_t wifiStatus = WiFi.status();
+    if (wifiStatus != WL_CONNECTED) {
+      Serial.printf("Cloud telemetry skipped: router Wi-Fi status %d\n", static_cast<int>(wifiStatus));
+      continue;
+    }
+
+    Serial.printf("Cloud telemetry Wi-Fi connected: IP %s, signal %d dBm\n",
+                  WiFi.localIP().toString().c_str(), WiFi.RSSI());
+
+    WiFiClientSecure tlsClient;
+    tlsClient.setCACert(VERCEL_ROOT_CA);
+    HTTPClient http;
+    if (!http.begin(tlsClient, AQUAGUARD_TELEMETRY_URL)) {
+      Serial.println("ERROR: Could not start HTTPS telemetry request");
+      continue;
+    }
+
+    http.setConnectTimeout(2500);
+    http.setTimeout(2500);
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Authorization", String("Bearer ") + AQUAGUARD_DEVICE_TOKEN);
+    const int responseCode = http.POST(request.json);
+    if (responseCode < 200 || responseCode >= 300) {
+      Serial.printf("ERROR: Cloud telemetry request returned HTTP %d\n", responseCode);
+    } else {
+      const String responseBody = http.getString();
+      if (responseBody.indexOf("\"command\":{") >= 0) {
+        CloudCommandResponse commandResponse;
+        responseBody.toCharArray(commandResponse.body, sizeof(commandResponse.body));
+        if (xQueueOverwrite(cloudCommandResponseQueue, &commandResponse) != pdPASS) {
+          Serial.println("ERROR: Could not queue cloud control command");
+        }
+      }
+    }
+    http.end();
+  }
+}
+
+void processCloudControlResponses() {
+  if (!cloudCommandResponseQueue) return;
+
+  CloudCommandResponse response;
+  while (xQueueReceive(cloudCommandResponseQueue, &response, 0) == pdTRUE) {
+    applyCloudControlCommand(String(response.body));
+  }
+}
+
+void sendCloudTelemetry() {
+  if (!cloudTelemetryQueue) return;
+
+  const uint32_t now = millis();
+  if (now - lastCloudTelemetryMs < CLOUD_TELEMETRY_INTERVAL_MS) return;
+  lastCloudTelemetryMs = now;
+
+  const String json = buildStatusJson();
+  if (json.length() >= CLOUD_TELEMETRY_JSON_SIZE) {
+    Serial.println("ERROR: Cloud telemetry payload exceeds the queue buffer");
     return;
   }
 
-  http.setConnectTimeout(2500);
-  http.setTimeout(2500);
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("Authorization", String("Bearer ") + AQUAGUARD_DEVICE_TOKEN);
-  const int responseCode = http.POST(buildStatusJson());
-  if (responseCode < 200 || responseCode >= 300) {
-    Serial.printf("ERROR: Cloud telemetry request returned HTTP %d\n", responseCode);
-  } else {
-    const String responseBody = http.getString();
-    applyCloudControlCommand(responseBody);
+  CloudTelemetryRequest request;
+  json.toCharArray(request.json, sizeof(request.json));
+  if (xQueueOverwrite(cloudTelemetryQueue, &request) != pdPASS) {
+    Serial.println("ERROR: Could not queue cloud telemetry");
   }
-  http.end();
 }
 
 void postLoadLed() {
@@ -905,6 +2224,23 @@ void postTestBuzzer() {
   updateOutputs();
   Serial.println("MANUAL BUZZER TEST: GPIO21 ON for 3 seconds");
   sendJson(200, "{\"ok\":true,\"message\":\"GPIO21 buzzer test started for 3 seconds\"}");
+}
+
+void postBuzzerEnabled() {
+  if (!server.hasArg("enabled")) {
+    sendJson(400, "{\"ok\":false,\"error\":\"Missing enabled setting. Use on or off.\"}");
+    return;
+  }
+  const String enabled = server.arg("enabled");
+  if (enabled != "on" && enabled != "off") {
+    sendJson(400, "{\"ok\":false,\"error\":\"Invalid enabled setting. Use on or off.\"}");
+    return;
+  }
+  buzzerEnabled = enabled == "on";
+  prefs.putBool("buzzerEnabled", buzzerEnabled);
+  updateOutputs();
+  sendJson(200, String("{\"ok\":true,\"buzzerEnabled\":") +
+                    (buzzerEnabled ? "true}" : "false}"));
 }
 
 void postBuzzerMode() {
@@ -953,17 +2289,12 @@ void setup() {
   digitalWrite(RED_LED_PIN, LOW);
   digitalWrite(YELLOW_LED_PIN, LOW);
   digitalWrite(GREEN_LED_PIN, LOW);
-  // Short startup self-test (every reset): confirms GPIO21 alarm control.
-  Serial.println("Startup buzzer self-test: 600 ms");
-  setBuzzer(true);
-  delay(600);
-  setBuzzer(false);
-
   pinMode(ULTRA_TRIG_PIN, OUTPUT);
   pinMode(ULTRA_ECHO_PIN, INPUT);
   digitalWrite(ULTRA_TRIG_PIN, LOW);
 
   prefs.begin("aquaguard", false);
+  buzzerEnabled = prefs.getBool("buzzerEnabled", true);
   // The buzzer mode can be changed from the phone without recompiling.
   BuzzerMode storedMode = prefs.getUChar("buzmode", 0) == 2 ? PASSIVE_PWM : ACTIVE_HIGH;
   setBuzzerMode(storedMode);
@@ -986,6 +2317,25 @@ void setup() {
     WiFi.begin(AQUAGUARD_WIFI_SSID, AQUAGUARD_WIFI_PASSWORD);
     WiFi.setAutoReconnect(true);
     Serial.printf("Connecting cloud telemetry to router Wi-Fi: %s\n", AQUAGUARD_WIFI_SSID);
+    if (strlen(AQUAGUARD_DEVICE_TOKEN) >= 32) {
+      cloudTelemetryQueue = xQueueCreate(1, sizeof(CloudTelemetryRequest));
+      cloudCommandResponseQueue = xQueueCreate(1, sizeof(CloudCommandResponse));
+      if (!cloudTelemetryQueue || !cloudCommandResponseQueue) {
+        Serial.println("ERROR: Could not allocate cloud telemetry queues");
+        if (cloudTelemetryQueue) vQueueDelete(cloudTelemetryQueue);
+        if (cloudCommandResponseQueue) vQueueDelete(cloudCommandResponseQueue);
+        cloudTelemetryQueue = nullptr;
+        cloudCommandResponseQueue = nullptr;
+      } else if (xTaskCreate(cloudTelemetryTask, "cloudTelemetry", 8192, nullptr, 1, nullptr) != pdPASS) {
+        Serial.println("ERROR: Could not start cloud telemetry task");
+        vQueueDelete(cloudTelemetryQueue);
+        vQueueDelete(cloudCommandResponseQueue);
+        cloudTelemetryQueue = nullptr;
+        cloudCommandResponseQueue = nullptr;
+      }
+    } else {
+      Serial.println("Cloud telemetry disabled: configure the device token in secrets.h");
+    }
   } else {
     Serial.println("Cloud telemetry disabled: configure router Wi-Fi in secrets.h");
   }
@@ -995,6 +2345,7 @@ void setup() {
   server.on("/api/led", HTTP_POST, postLoadLed);
   server.on("/api/config", HTTP_POST, postConfig);
   server.on("/api/buzzer/test", HTTP_POST, postTestBuzzer);
+  server.on("/api/buzzer/enabled", HTTP_POST, postBuzzerEnabled);
   server.on("/api/buzzer/mode", HTTP_POST, postBuzzerMode);
   server.on("/generate_204", HTTP_GET, sendPage);   // Android portal check
   server.on("/hotspot-detect.html", HTTP_GET, sendPage); // iPhone portal check
@@ -1023,6 +2374,7 @@ void loop() {
     sampleSensors();
   }
   updateOutputs();
+  processCloudControlResponses();
   sendCloudTelemetry();
 
   static uint32_t lastLogMs = 0;
