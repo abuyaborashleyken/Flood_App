@@ -154,18 +154,21 @@ header{
 
 /* Header Controls & Tools */
 .header-tools{
-  display:flex;
+  display:inline-flex;
   align-items:center;
   gap:10px;
   flex:0 0 auto;
   margin-left:auto;
 }
 .power-source-toggle{
+  height:38px;
+  min-height:38px;
+  max-height:38px;
+  box-sizing:border-box;
   display:inline-flex;
   align-items:center;
-  gap:9px;
-  min-height:38px;
-  padding:6px 12px;
+  gap:8px;
+  padding:0 12px;
   border:1px solid rgba(255,255,255,.14);
   border-radius:var(--radius-md);
   background:var(--navy-surface);
@@ -173,16 +176,21 @@ header{
   font-size:12px;
   font-weight:700;
   white-space:nowrap;
+  cursor:pointer;
   transition:all .18s ease;
 }
 .power-source-toggle:hover:not(:disabled){
   background:#1a2f55;
-  border-color:rgba(255,255,255,.25);
+  border-color:rgba(255,255,255,.28);
   box-shadow:0 2px 8px rgba(0,0,0,.2);
 }
 .power-source-toggle:focus-visible{
   outline:2px solid #60a5fa;
   outline-offset:2px;
+}
+.power-source-toggle:disabled{
+  opacity:.6;
+  cursor:not-allowed;
 }
 .power-switch-track{
   width:32px;
@@ -213,18 +221,33 @@ header{
   transform:translateX(14px);
 }
 .remote-lock-button{
+  height:38px;
   min-height:38px;
-  padding:6px 12px;
+  max-height:38px;
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:0 12px;
   border:1px solid rgba(255,255,255,.14);
   border-radius:var(--radius-md);
   background:var(--navy-surface);
-  color:#94a3b8;
+  color:#e2e8f0;
   font-size:12px;
   font-weight:700;
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
+  white-space:nowrap;
+  cursor:pointer;
   transition:all .18s ease;
+}
+.remote-lock-button::before{
+  content:"";
+  width:14px;
+  height:14px;
+  background-color:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E") no-repeat center / contain;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E") no-repeat center / contain;
+  flex:none;
 }
 .remote-lock-button:hover{
   background:#1a2f55;
@@ -234,14 +257,21 @@ header{
 
 .alert-sound-button, .notification-button{
   width:38px;
+  min-width:38px;
   height:38px;
-  display:grid;
-  place-items:center;
+  min-height:38px;
+  max-height:38px;
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
   border:1px solid rgba(255,255,255,.14);
   border-radius:var(--radius-md);
   background:var(--navy-surface);
   color:#e2e8f0;
   position:relative;
+  cursor:pointer;
+  flex:none;
   transition:all .18s ease;
 }
 .alert-sound-button:hover, .notification-button:hover{
@@ -252,12 +282,14 @@ header{
 .alert-sound-button svg, .notification-button svg{
   width:18px;
   height:18px;
+  display:block;
 }
 .alert-sound-button .sound-waves{display:none}
 .alert-sound-button.sound-on{
   color:#38bdf8;
-  border-color:#0284c7;
-  background:#0c4a6e40;
+  border-color:rgba(56,189,248,.45);
+  background:rgba(56,189,248,.12);
+  box-shadow:0 0 10px rgba(56,189,248,.2);
 }
 .alert-sound-button.sound-on .sound-waves{display:block}
 .alert-sound-button.sound-on .sound-muted{display:none}
@@ -286,13 +318,18 @@ header{
 
 /* Connection & Telemetry Clock */
 .connection-clock{
-  display:flex;
+  height:38px;
+  min-height:38px;
+  max-height:38px;
+  box-sizing:border-box;
+  display:inline-flex;
   align-items:center;
-  gap:10px;
-  padding:6px 12px;
-  background:rgba(255,255,255,.05);
-  border:1px solid rgba(255,255,255,.08);
+  gap:9px;
+  padding:0 12px;
+  background:var(--navy-surface);
+  border:1px solid rgba(255,255,255,.14);
   border-radius:var(--radius-md);
+  flex:none;
 }
 .dot{
   width:9px;
@@ -318,19 +355,21 @@ header{
 .clock{
   display:flex;
   flex-direction:column;
+  justify-content:center;
   text-align:right;
 }
 .clock strong{
   font-family:var(--font-mono);
-  font-size:13px;
+  font-size:12px;
   font-weight:700;
   color:#f8fafc;
-  line-height:1.2;
+  line-height:1.15;
+  letter-spacing:0.2px;
 }
 .clock small{
-  font-size:10px;
+  font-size:9.5px;
   color:#94a3b8;
-  line-height:1.2;
+  line-height:1.1;
 }
 
 /* App Shell & Sidebar */
@@ -1526,19 +1565,38 @@ dialog::backdrop{
 /* PWA Install Button & Dialog */
 .install-app-button{
   height:38px;
+  min-height:38px;
+  max-height:38px;
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
   padding:0 12px;
   border:1px solid rgba(56,189,248,.35);
   border-radius:var(--radius-md);
   background:rgba(56,189,248,.12);
   color:#7dd3fc;
   font-size:12px;
-  font-weight:750;
+  font-weight:700;
   white-space:nowrap;
+  cursor:pointer;
+  flex:none;
   transition:all .18s ease;
+}
+.install-app-button::before{
+  content:"";
+  width:14px;
+  height:14px;
+  background-color:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'%3E%3C/path%3E%3Cpolyline points='7 10 12 15 17 10'%3E%3C/polyline%3E%3Cline x1='12' y1='15' x2='12' y2='3'%3E%3C/line%3E%3C/svg%3E") no-repeat center / contain;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'%3E%3C/path%3E%3Cpolyline points='7 10 12 15 17 10'%3E%3C/polyline%3E%3Cline x1='12' y1='15' x2='12' y2='3'%3E%3C/line%3E%3C/svg%3E") no-repeat center / contain;
+  flex:none;
 }
 .install-app-button:hover{
   background:rgba(56,189,248,.22);
   color:#fff;
+  border-color:rgba(56,189,248,.5);
   box-shadow:0 0 12px rgba(56,189,248,.3);
 }
 .install-app-button[hidden]{display:none}
@@ -1773,21 +1831,59 @@ dialog::backdrop{
   .side-link[aria-pressed="true"]{
     box-shadow:inset 0 -3px 0 var(--blue-brand);
   }
-  .nav{padding:10px 14px}
+  .nav{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:10px;
+    padding:10px 14px;
+  }
+  .brand{
+    width:100%;
+    justify-content:flex-start;
+  }
   .brand strong{font-size:16px}
   .brand-badge{display:none}
-  .header-tools{gap:6px}
-  .clock{display:none}
+  .header-tools{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    gap:8px;
+    margin-left:0;
+    overflow-x:auto;
+    overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+    padding:2px 0;
+  }
+  .header-tools::-webkit-scrollbar{display:none}
+  .header-tools > *{flex-shrink:0}
   main{padding:18px 14px 28px}
   .sensors{gap:10px}
   .status-card,.level-card{min-height:240px;padding:18px}
   .install-platforms{grid-template-columns:1fr}
 }
 @media(max-width:480px){
-  .header-tools{gap:4px}
-  .power-source-toggle{padding:5px 8px;font-size:11px}
+  .power-source-toggle,
+  .remote-lock-button,
+  .alert-sound-button,
+  .notification-button,
+  .install-app-button,
+  .connection-clock{
+    height:36px;
+    min-height:36px;
+    max-height:36px;
+  }
+  .power-source-toggle{padding:0 9px;font-size:11px;gap:6px}
   .power-source-toggle #powerToggleState{display:none}
-  .alert-sound-button,.notification-button{width:34px;height:34px}
+  .remote-lock-button{padding:0 9px;font-size:11px}
+  .alert-sound-button,.notification-button{width:36px;min-width:36px}
+  .install-app-button{padding:0 9px;font-size:11px}
+  .connection-clock{padding:0 9px;gap:7px}
+  .clock strong{font-size:11.5px}
+  .clock small{display:none}
+  .header-tools{gap:6px}
   .sensors{grid-template-columns:1fr}
   .config-grid{grid-template-columns:1fr}
   .level-card{padding:16px}
@@ -1798,6 +1894,33 @@ dialog::backdrop{
     width:calc(100vw - 20px);
   }
 }
+@media(max-width:380px){
+  .nav{padding:10px 12px;gap:8px}
+  .brand strong{font-size:14px}
+  .brand small{font-size:8.5px}
+  .logo{width:36px;height:36px}
+  .power-source-toggle,
+  .remote-lock-button,
+  .alert-sound-button,
+  .notification-button,
+  .install-app-button,
+  .connection-clock{
+    height:34px;
+    min-height:34px;
+    max-height:34px;
+  }
+  .power-source-toggle{padding:0 7px;font-size:10px;gap:5px}
+  .power-switch-track{width:26px;height:15px}
+  .power-switch-track::after{width:11px;height:11px}
+  .power-source-toggle[aria-pressed="true"] .power-switch-track::after{transform:translateX(11px)}
+  .remote-lock-button{padding:0 7px;font-size:10px}
+  .alert-sound-button,.notification-button{width:34px;min-width:34px}
+  .alert-sound-button svg,.notification-button svg{width:16px;height:16px}
+  .install-app-button{padding:0 7px;font-size:10px}
+  .connection-clock{padding:0 7px;gap:6px}
+  .clock strong{font-size:10.5px}
+  .header-tools{gap:5px}
+}
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   *,*::before,*::after{
@@ -1805,37 +1928,7 @@ dialog::backdrop{
     transition-duration:.01ms!important;
   }
 }
-@media(max-width:680px){
- .nav{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding:12px 14px}
- .brand{min-width:0;gap:9px}
- .brand strong{font-size:clamp(15px,4.2vw,18px);white-space:nowrap}
- .brand small{display:block;font-size:9px}
- .header-tools{display:flex;width:100%;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:6px;margin:0}
- .power-source-toggle{margin-right:auto;min-width:0;max-width:100%;min-height:36px}
- .alert-sound-button,.notification-button{width:36px;height:36px}
- .install-app-button{height:36px;padding:0 8px;font-size:10px}
- .connection-clock{flex:0 0 100%;display:flex;flex-direction:row;align-items:center;justify-content:flex-end;min-width:0;gap:6px}
- .connection-clock .clock{display:block;min-width:0;text-align:right}
- .clock strong{font-size:12px}
- .clock small{font-size:9px;white-space:nowrap}
-}
-@media(max-width:380px){
- .nav{padding:10px 12px;gap:8px}
- .brand strong{font-size:14px}
- .brand small{font-size:8px}
- .logo{width:36px;height:36px}
- .header-tools{gap:5px}
- .power-source-toggle{min-height:34px;gap:4px;padding:5px 6px;font-size:10px}
- .power-source-toggle #powerToggleState{display:none}
- .power-switch-track{width:26px;height:16px}
- .power-switch-track:after{width:10px;height:10px}
- .power-source-toggle[aria-pressed="true"] .power-switch-track:after{transform:translateX(10px)}
- .alert-sound-button,.notification-button{width:32px;height:32px}
- .alert-sound-button svg,.notification-button svg{width:16px;height:16px}
- .install-app-button{height:34px;padding:0 6px;font-size:9px}
- .clock strong{font-size:11px}
- .clock small{font-size:8px}
-}
+
 html[data-theme="dark"]{
   color-scheme:dark;
   --bg-app:#000;
