@@ -200,42 +200,44 @@ header{
   background:var(--navy-dark);
   color:#fff;
   border-bottom:1px solid rgba(255,255,255,.08);
-  box-shadow:0 4px 20px rgba(0,0,0,.15);
+  box-shadow:0 4px 20px rgba(0,0,0,.22);
   flex:none;
 }
 .nav{
   max-width:1600px;
   margin:0 auto;
-  height:64px;
-  min-height:64px;
-  padding:0 clamp(14px,3vw,32px);
+  display:flex;
+  flex-direction:column;
+  width:100%;
+}
+.header-layer-brand{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:12px;
-  overflow:hidden;
+  padding:10px clamp(16px,3vw,32px);
+  border-bottom:1px solid rgba(255,255,255,.07);
+  min-height:58px;
+  gap:16px;
 }
 .brand{
   display:flex;
   align-items:center;
-  gap:11px;
+  gap:12px;
   min-width:0;
-  flex:1 1 0;
   text-decoration:none;
-  overflow:hidden;
 }
 .logo{
-  width:46px;
-  height:46px;
-  border-radius:14px;
+  width:42px;
+  height:42px;
+  border-radius:12px;
   background:linear-gradient(135deg,#0284c7,#2563eb);
   color:#fff;
   border:2px solid #38bdf8;
-  box-shadow:0 0 16px rgba(56,189,248,.35);
+  box-shadow:0 0 14px rgba(56,189,248,.35);
   flex:none;
   display:grid;
   place-items:center;
-  font-size:22px;
+  font-size:20px;
   font-weight:900;
 }
 .brand-copy{
@@ -243,14 +245,18 @@ header{
   flex-direction:column;
   min-width:0;
 }
-.brand strong{
-  font-size:clamp(16px,2vw,19px);
-  font-weight:800;
-  letter-spacing:-.4px;
-  color:#fff;
+.brand-title-row{
   display:flex;
   align-items:center;
   gap:8px;
+  flex-wrap:nowrap;
+}
+.brand strong{
+  font-size:clamp(16px,2vw,18px);
+  font-weight:800;
+  letter-spacing:-.3px;
+  color:#fff;
+  white-space:nowrap;
 }
 .brand-badge{
   font-size:9px;
@@ -262,19 +268,56 @@ header{
   color:#7dd3fc;
   border:1px solid rgba(56,189,248,.3);
   text-transform:uppercase;
+  white-space:nowrap;
 }
 .brand small{
   color:#94a3b8;
   font-size:10px;
   font-weight:700;
-  letter-spacing:1.2px;
+  letter-spacing:1px;
   text-transform:uppercase;
+  margin-top:2px;
+  white-space:nowrap;
 }
-.header-tools{
+.header-status-badge{
   display:inline-flex;
   align-items:center;
+  gap:7px;
+  padding:5px 12px;
+  background:rgba(56,189,248,.1);
+  border:1px solid rgba(56,189,248,.25);
+  border-radius:20px;
+  font-size:10.5px;
+  font-weight:750;
+  letter-spacing:.8px;
+  color:#7dd3fc;
+  text-transform:uppercase;
+  flex:none;
+}
+.status-beacon{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#10b981;
+  box-shadow:0 0 8px #10b981;
+  animation:beacon-pulse 2s cubic-bezier(.4,0,.6,1) infinite;
+}
+.header-layer-tools{
+  display:flex;
+  align-items:center;
+  padding:7px clamp(16px,3vw,32px);
+  background:rgba(15,29,56,.55);
+  min-height:52px;
+  overflow:visible;
+}
+.header-tools{
+  display:flex;
+  align-items:center;
   gap:10px;
-  flex:0 0 auto;
+  width:100%;
+  flex-wrap:nowrap;
+}
+.header-tools > .connection-clock{
   margin-left:auto;
 }
 .header-btn-icon{
@@ -295,8 +338,8 @@ header{
   padding:0 12px;
   border:1px solid rgba(255,255,255,.2);
   border-radius:10px;
-  background:rgba(255,255,255,.07);
-  color:#ffffff;
+  background:rgba(255,255,255,.08);
+  color:#e2e8f0;
   font-size:12px;
   font-weight:700;
   white-space:nowrap;
@@ -305,7 +348,7 @@ header{
   transition:all .18s ease;
 }
 .power-source-toggle:hover:not(:disabled){
-  background:rgba(255,255,255,.14);
+  background:rgba(255,255,255,.15);
   border-color:rgba(255,255,255,.35);
   box-shadow:0 2px 10px rgba(0,0,0,.25);
 }
@@ -351,19 +394,25 @@ header{
   justify-content:center;
   border:1px solid rgba(255,255,255,.2);
   border-radius:10px;
-  background:rgba(255,255,255,.07);
-  color:#ffffff;
+  background:rgba(255,255,255,.08);
+  color:#e2e8f0;
   position:relative;
   cursor:pointer;
   flex:none;
   transition:all .18s ease;
 }
 .alert-sound-button:hover, .notification-button:hover{
-  background:rgba(255,255,255,.14);
+  background:rgba(255,255,255,.16);
   color:#38bdf8;
-  border-color:rgba(56,189,248,.5);
+  border-color:rgba(56,189,248,.55);
 }
-.alert-sound-button svg, .notification-button svg{width:20px;height:20px;stroke-width:2.2;display:block;flex:none}
+.alert-sound-button svg, .notification-button svg{
+  width:20px;
+  height:20px;
+  stroke-width:2;
+  display:block;
+  flex:none;
+}
 .alert-sound-button .sound-waves{display:none}
 .alert-sound-button.sound-on{
   color:#38bdf8;
@@ -403,14 +452,14 @@ header{
   align-items:center;
   gap:9px;
   padding:0 12px;
-  background:rgba(255,255,255,.07);
+  background:rgba(255,255,255,.08);
   border:1px solid rgba(255,255,255,.2);
   border-radius:10px;
   flex:none;
 }
 .dot{
-  width:10px;
-  height:10px;
+  width:9px;
+  height:9px;
   border-radius:50%;
   background:#f59e0b;
   flex:none;
@@ -1101,77 +1150,39 @@ dialog::backdrop{background:rgba(11,19,41,.6);backdrop-filter:blur(6px)}
   .config-grid{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:768px){
-  /* Natural mobile scrolling: unfreeze body and main so footer is not static */
-  body{
-    height:auto;
-    min-height:100vh;
-    min-height:100dvh;
-    overflow-x:hidden;
-    overflow-y:auto;
-  }
-  .app-shell{
-    display:grid;
-    grid-template-columns:minmax(0,1fr);
-    height:auto;
-    min-height:auto;
-    overflow:visible;
-    flex:none;
-  }
-  .sidebar{
-    position:static;
-    border-right:0;
-    border-bottom:1px solid var(--border-subtle);
-    padding:8px 12px;
-    height:auto;
-    min-height:auto;
-    overflow:visible;
-  }
+  body{height:auto;min-height:100svh;overflow-x:hidden;overflow-y:auto}
+  .app-shell{display:grid;grid-template-columns:minmax(0,1fr);height:auto;min-height:auto;overflow:visible;flex:none}
+  .sidebar{position:static;border-right:0;border-bottom:1px solid var(--border-subtle);padding:8px 12px;height:auto;min-height:auto;overflow:visible}
   .sidebar-head,.sidebar-note{display:none}
   .side-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
   .side-link{justify-content:center;flex-direction:column;gap:3px;padding:8px 4px;font-size:11px;text-align:center}
   .side-link[aria-pressed="true"]{box-shadow:inset 0 -3px 0 var(--blue-brand)}
-  .nav{
-    display:flex;
-    flex-direction:column;
-    align-items:stretch;
-    gap:10px;
-    padding:10px 14px;
-  }
-  .brand{width:100%;justify-content:flex-start}
-  .brand strong{font-size:16px}
-  .brand-badge{display:none}
-  .header-tools{
-    width:100%;
-    display:flex;
-    align-items:center;
-    justify-content:flex-start;
-    gap:8px;
-    margin-left:0;
-    overflow-x:auto;
-    overflow-y:hidden;
-    -webkit-overflow-scrolling:touch;
-    scrollbar-width:none;
-    padding:2px 0;
-  }
-  .header-tools::-webkit-scrollbar{display:none}
+
+  .header-layer-brand{padding:8px 14px;min-height:52px;gap:10px}
+  .brand strong{font-size:15px}
+  .brand small{font-size:9px;letter-spacing:.6px}
+  .header-status-badge{font-size:9px;padding:3px 8px}
+  .header-layer-tools{padding:6px 14px;min-height:48px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .header-layer-tools::-webkit-scrollbar{display:none}
+  .header-tools{width:max-content;min-width:100%;gap:8px}
   .header-tools > *{flex-shrink:0}
-  main{
-    overflow-y:visible;
-    height:auto;
-    min-height:auto;
-    padding:18px 14px 28px;
-  }
-  .footer{
-    position:relative;
-    margin-top:auto;
-    flex:none;
-  }
+
+  main{overflow-y:visible;height:auto;min-height:auto;padding:18px 14px 28px}
+  .footer{position:static;flex:none}
   .sensors{gap:10px}
   .status-card,.level-card{min-height:240px;padding:18px}
   .home-illustration{width:64px;height:64px}
   .home-illustration svg{width:38px;height:38px}
 }
 @media(max-width:480px){
+  .header-layer-brand{padding:6px 12px;min-height:48px}
+  .logo{width:36px;height:36px;font-size:18px}
+  .brand strong{font-size:14px}
+  .brand small{font-size:8.5px}
+  .brand-badge{font-size:8px;padding:1px 5px}
+  .header-status-badge{display:none}
+  .header-layer-tools{padding:5px 10px;min-height:46px}
+  .header-tools{gap:6px}
   .power-source-toggle,
   .alert-sound-button,
   .notification-button,
@@ -1185,18 +1196,18 @@ dialog::backdrop{background:rgba(11,19,41,.6);backdrop-filter:blur(6px)}
   .alert-sound-button,.notification-button{width:36px;min-width:36px}
   .alert-sound-button svg,.notification-button svg{width:18px;height:18px}
   .connection-clock{padding:0 8px;gap:7px}
-  .clock strong{font-size:11.5px}
+  .clock strong{font-size:11px}
   .clock small{display:none}
-  .header-tools{gap:6px}
   .sensors{grid-template-columns:1fr}
   .config-grid{grid-template-columns:1fr}
   .power-dialog,.history-dialog{inset:68px 10px auto;width:calc(100vw - 20px)}
 }
 @media(max-width:380px){
-  .nav{padding:10px 12px;gap:8px}
-  .brand strong{font-size:14px}
-  .brand small{font-size:8.5px}
-  .logo{width:36px;height:36px}
+  .logo{width:32px;height:32px;font-size:16px}
+  .brand strong{font-size:13px}
+  .brand small{font-size:8px}
+  .header-layer-tools{padding:4px 8px}
+  .header-tools{gap:5px}
   .power-source-toggle,
   .alert-sound-button,
   .notification-button,
@@ -1212,8 +1223,7 @@ dialog::backdrop{background:rgba(11,19,41,.6);backdrop-filter:blur(6px)}
   .alert-sound-button,.notification-button{width:34px;min-width:34px}
   .alert-sound-button svg,.notification-button svg{width:16px;height:16px}
   .connection-clock{padding:0 6px;gap:5px}
-  .clock strong{font-size:10.5px}
-  .header-tools{gap:4px}
+  .clock strong{font-size:10px}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -1230,6 +1240,7 @@ html[data-theme="dark"]{
   --shadow-card:0 4px 14px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.35);
   --shadow-elevated:0 14px 34px rgba(0,0,0,.7),0 4px 10px rgba(0,0,0,.45);
 }
+html[data-theme="dark"] .header-layer-tools{background:rgba(18,18,18,.8);border-bottom-color:rgba(255,255,255,.04)}
 html[data-theme="dark"] body,
 html[data-theme="dark"] .app-shell{background:#000;color:var(--ink-primary)}
 html[data-theme="dark"] .sidebar,
@@ -1307,40 +1318,53 @@ html[data-theme="dark"] .theme-toggle{background:#111;color:#f5f5f5}
 </dialog>
 <header>
   <div class="nav">
-    <div class="brand">
-      <div class="logo">≋</div>
-      <div class="brand-copy">
-        <strong>S.E.C.U.R.E APPLICATION <span class="brand-badge">Device AP</span></strong>
-        <small>WATER LEVEL MONITORING SYSTEM</small>
+    <!-- Layer 1: Application Identity -->
+    <div class="header-layer-brand">
+      <div class="brand">
+        <div class="logo">≋</div>
+        <div class="brand-copy">
+          <div class="brand-title-row">
+            <strong>S.E.C.U.R.E APPLICATION</strong>
+            <span class="brand-badge">Device AP</span>
+          </div>
+          <small>WATER LEVEL MONITORING SYSTEM</small>
+        </div>
+      </div>
+      <div class="header-status-badge" aria-label="System status: Device Active">
+        <span class="status-beacon" aria-hidden="true"></span>
+        <span class="status-beacon-text">DEVICE AP</span>
       </div>
     </div>
-    <div class="header-tools">
-      <button class="power-source-toggle" id="powerSourceToggle" type="button" aria-label="Power Source is off" aria-pressed="false" disabled>
-        <span>Power Source</span>
-        <span class="power-switch-track" aria-hidden="true"></span>
-        <span id="powerToggleState">Off</span>
-      </button>
-      <span class="sr-only" id="powerToggleMessage" role="status" aria-live="polite"></span>
-      <button class="alert-sound-button" id="alertSoundButton" type="button" aria-label="Turn on alert sound" aria-pressed="false" title="Turn on alert sound">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
-          <path class="sound-waves" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>
-          <path class="sound-muted" d="m16 9 5 6m0-6-5 6"/>
-        </svg>
-      </button>
-      <span class="sr-only" id="alertSoundStatus" role="status" aria-live="polite">Sound is off. Tap the sound button to enable alert sounds.</span>
-      <button class="notification-button" id="notificationButton" type="button" aria-label="Alerts: 0" title="Show alerts">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
-          <path d="M10 21h4"/>
-        </svg>
-        <span class="notification-count" id="notificationCount" hidden>0</span>
-      </button>
-      <div class="connection-clock" role="status" aria-label="Connection status and local date and time">
-        <span class="dot" id="linkDot" aria-label="Connecting"></span>
-        <div class="clock" aria-label="Local date and time">
-          <strong id="clockTime">--:-- --</strong>
-          <small id="clockDate">Loading date...</small>
+    <!-- Layer 2: Action Icons & Telemetry Controls -->
+    <div class="header-layer-tools">
+      <div class="header-tools">
+        <button class="power-source-toggle" id="powerSourceToggle" type="button" aria-label="Power Source is off" aria-pressed="false" disabled>
+          <span>Power Source</span>
+          <span class="power-switch-track" aria-hidden="true"></span>
+          <span id="powerToggleState">Off</span>
+        </button>
+        <span class="sr-only" id="powerToggleMessage" role="status" aria-live="polite"></span>
+        <button class="alert-sound-button" id="alertSoundButton" type="button" aria-label="Turn on alert sound" aria-pressed="false" title="Turn on alert sound">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
+            <path class="sound-waves" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>
+            <path class="sound-muted" d="m16 9 5 6m0-6-5 6"/>
+          </svg>
+        </button>
+        <span class="sr-only" id="alertSoundStatus" role="status" aria-live="polite">Sound is off. Tap the sound button to enable alert sounds.</span>
+        <button class="notification-button" id="notificationButton" type="button" aria-label="Alerts: 0" title="Show alerts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
+            <path d="M10 21h4"/>
+          </svg>
+          <span class="notification-count" id="notificationCount" hidden>0</span>
+        </button>
+        <div class="connection-clock" role="status" aria-label="Connection status and local date and time">
+          <span class="dot" id="linkDot" aria-label="Connecting"></span>
+          <div class="clock" aria-label="Local date and time">
+            <strong id="clockTime">--:-- --</strong>
+            <small id="clockDate">Loading date...</small>
+          </div>
         </div>
       </div>
     </div>

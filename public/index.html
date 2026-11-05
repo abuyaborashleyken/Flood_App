@@ -73,7 +73,7 @@ button,input,select{font:inherit}
 button{cursor:pointer}
 button:disabled{cursor:not-allowed;opacity:.55}
 
-/* Top Global Header */
+/* Top Global Header - Two-Layer Architecture */
 header{
   position:sticky;
   top:0;
@@ -81,38 +81,42 @@ header{
   background:var(--navy-dark);
   color:#fff;
   border-bottom:1px solid rgba(255,255,255,.08);
-  box-shadow:0 4px 20px rgba(0,0,0,.15);
+  box-shadow:0 4px 20px rgba(0,0,0,.22);
   flex:none;
 }
 .nav{
   max-width:1600px;
   margin:0 auto;
-  height:64px;
-  min-height:64px;
-  padding:0 clamp(14px,3vw,32px);
+  display:flex;
+  flex-direction:column;
+  width:100%;
+}
+
+/* Layer 1: Application Branding & Telemetry Status */
+.header-layer-brand{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:12px;
-  overflow:hidden;
+  padding:10px clamp(16px,3vw,32px);
+  border-bottom:1px solid rgba(255,255,255,.07);
+  min-height:58px;
+  gap:16px;
 }
 .brand{
   display:flex;
   align-items:center;
-  gap:11px;
+  gap:12px;
   min-width:0;
-  flex:1 1 0;
   text-decoration:none;
-  overflow:hidden;
 }
 .logo{
-  width:46px;
-  height:46px;
-  border-radius:14px;
+  width:42px;
+  height:42px;
+  border-radius:12px;
   background:#fff;
   overflow:hidden;
   border:2px solid #38bdf8;
-  box-shadow:0 0 16px rgba(56,189,248,.35);
+  box-shadow:0 0 14px rgba(56,189,248,.35);
   flex:none;
   display:grid;
   place-items:center;
@@ -128,14 +132,18 @@ header{
   flex-direction:column;
   min-width:0;
 }
-.brand strong{
-  font-size:clamp(16px,2vw,19px);
-  font-weight:800;
-  letter-spacing:-.4px;
-  color:#fff;
+.brand-title-row{
   display:flex;
   align-items:center;
   gap:8px;
+  flex-wrap:nowrap;
+}
+.brand strong{
+  font-size:clamp(16px,2vw,18px);
+  font-weight:800;
+  letter-spacing:-.3px;
+  color:#fff;
+  white-space:nowrap;
 }
 .brand-badge{
   font-size:9px;
@@ -147,23 +155,61 @@ header{
   color:#7dd3fc;
   border:1px solid rgba(56,189,248,.3);
   text-transform:uppercase;
+  white-space:nowrap;
 }
 .brand small{
   color:#94a3b8;
   font-size:10px;
   font-weight:700;
-  letter-spacing:1.2px;
+  letter-spacing:1px;
   text-transform:uppercase;
+  margin-top:2px;
+  white-space:nowrap;
 }
-
-/* Header Controls & Tools */
-.header-tools{
+.header-status-badge{
   display:inline-flex;
   align-items:center;
-  gap:8px;
-  flex:0 0 auto;
-  flex-shrink:0;
+  gap:7px;
+  padding:5px 12px;
+  background:rgba(56,189,248,.1);
+  border:1px solid rgba(56,189,248,.25);
+  border-radius:20px;
+  font-size:10.5px;
+  font-weight:750;
+  letter-spacing:.8px;
+  color:#7dd3fc;
+  text-transform:uppercase;
+  flex:none;
 }
+.status-beacon{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#10b981;
+  box-shadow:0 0 8px #10b981;
+  animation:beacon-pulse 2s cubic-bezier(.4,0,.6,1) infinite;
+}
+
+/* Layer 2: Action Tools & Controls Toolbar */
+.header-layer-tools{
+  display:flex;
+  align-items:center;
+  padding:7px clamp(16px,3vw,32px);
+  background:rgba(15,29,56,.55);
+  min-height:52px;
+  overflow:visible;
+}
+.header-tools{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  flex-wrap:nowrap;
+}
+.header-tools > .connection-clock{
+  margin-left:auto;
+}
+
 .header-btn-icon{
   width:16px;
   height:16px;
@@ -172,14 +218,14 @@ header{
   flex:none;
 }
 .power-source-toggle{
-  height:40px;
-  min-height:40px;
-  max-height:40px;
+  height:38px;
+  min-height:38px;
+  max-height:38px;
   box-sizing:border-box;
   display:inline-flex;
   align-items:center;
   gap:8px;
-  padding:0 13px;
+  padding:0 12px;
   border:1px solid rgba(255,255,255,.2);
   border-radius:10px;
   background:rgba(255,255,255,.08);
@@ -192,7 +238,7 @@ header{
   transition:all .18s ease;
 }
 .power-source-toggle:hover:not(:disabled){
-  background:rgba(255,255,255,.14);
+  background:rgba(255,255,255,.15);
   border-color:rgba(255,255,255,.35);
   box-shadow:0 2px 10px rgba(0,0,0,.25);
 }
@@ -233,9 +279,9 @@ header{
   transform:translateX(14px);
 }
 .remote-lock-button{
-  height:40px;
-  min-height:40px;
-  max-height:40px;
+  height:38px;
+  min-height:38px;
+  max-height:38px;
   box-sizing:border-box;
   display:inline-flex;
   align-items:center;
@@ -254,17 +300,17 @@ header{
   transition:all .18s ease;
 }
 .remote-lock-button:hover{
-  background:rgba(255,255,255,.14);
+  background:rgba(255,255,255,.16);
   color:#38bdf8;
   border-color:rgba(56,189,248,.5);
 }
 
 .alert-sound-button, .notification-button{
-  width:40px;
-  min-width:40px;
-  height:40px;
-  min-height:40px;
-  max-height:40px;
+  width:38px;
+  min-width:38px;
+  height:38px;
+  min-height:38px;
+  max-height:38px;
   box-sizing:border-box;
   display:inline-flex;
   align-items:center;
@@ -284,8 +330,8 @@ header{
   border-color:rgba(56,189,248,.55);
 }
 .alert-sound-button svg, .notification-button svg{
-  width:19px;
-  height:19px;
+  width:20px;
+  height:20px;
   stroke-width:2;
   display:block;
   flex:none;
@@ -324,9 +370,9 @@ header{
 
 /* Connection & Telemetry Clock */
 .connection-clock{
-  height:40px;
-  min-height:40px;
-  max-height:40px;
+  height:38px;
+  min-height:38px;
+  max-height:38px;
   box-sizing:border-box;
   display:inline-flex;
   align-items:center;
@@ -338,8 +384,8 @@ header{
   flex:none;
 }
 .dot{
-  width:10px;
-  height:10px;
+  width:9px;
+  height:9px;
   border-radius:50%;
   background:#f59e0b;
   flex:none;
@@ -1801,7 +1847,7 @@ dialog::backdrop{
   .config-grid{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:768px){
-  /* Unfreeze body so content + footer scroll normally */
+  /* Natural mobile scrolling: unfreeze body so content and footer scroll normally */
   body{
     height:auto;
     min-height:100svh;
@@ -1842,40 +1888,39 @@ dialog::backdrop{
   .side-link[aria-pressed="true"]{
     box-shadow:inset 0 -3px 0 var(--blue-brand);
   }
-  /* Keep nav as a single row – brand left, tools right */
-  .nav{
-    height:60px;
-    min-height:60px;
-    padding:0 14px;
+
+  /* Two Layer Header Mobile Optimization */
+  .header-layer-brand{
+    padding:8px 14px;
+    min-height:52px;
     gap:10px;
-    overflow:visible;
   }
-  .brand{flex:1 1 0;overflow:hidden}
-  .brand strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .brand small{display:none}
-  .brand-badge{display:none}
-  /* Tools become a compact horizontally-scrollable row to the right */
-  .header-tools{
-    flex-shrink:0;
-    display:inline-flex;
-    align-items:center;
-    gap:7px;
+  .brand strong{font-size:15px}
+  .brand small{font-size:9px;letter-spacing:.6px}
+  .header-status-badge{font-size:9px;padding:3px 8px}
+  .header-layer-tools{
+    padding:6px 14px;
+    min-height:48px;
     overflow-x:auto;
     overflow-y:hidden;
     -webkit-overflow-scrolling:touch;
     scrollbar-width:none;
-    max-width:min(68vw,420px);
-    padding:2px 0;
   }
-  .header-tools::-webkit-scrollbar{display:none}
+  .header-layer-tools::-webkit-scrollbar{display:none}
+  .header-tools{
+    width:max-content;
+    min-width:100%;
+    gap:8px;
+  }
   .header-tools > *{flex-shrink:0}
+
   main{
     overflow-y:visible;
     height:auto;
     min-height:auto;
     padding:18px 14px 28px;
   }
-  /* Footer scrolls with page – no sticky, no fixed */
+  /* Footer scrolls with page naturally */
   .footer{
     position:static;
     flex:none;
@@ -1885,9 +1930,21 @@ dialog::backdrop{
   .install-platforms{grid-template-columns:1fr}
 }
 @media(max-width:480px){
-  .nav{height:56px;min-height:56px;padding:0 12px;gap:8px}
+  .header-layer-brand{
+    padding:6px 12px;
+    min-height:48px;
+  }
+  .logo{width:36px;height:36px}
   .brand strong{font-size:14px}
-  .logo{width:38px;height:38px}
+  .brand small{font-size:8.5px}
+  .brand-badge{font-size:8px;padding:1px 5px}
+  .header-status-badge{display:none}
+
+  .header-layer-tools{
+    padding:5px 10px;
+    min-height:46px;
+  }
+  .header-tools{gap:6px}
   .power-source-toggle,
   .remote-lock-button,
   .alert-sound-button,
@@ -1898,16 +1955,15 @@ dialog::backdrop{
     min-height:36px;
     max-height:36px;
   }
-  .power-source-toggle{padding:0 9px;font-size:11px;gap:6px}
-  .power-source-toggle #powerToggleState{display:none}
-  .remote-lock-button{padding:0 9px;font-size:11px;gap:5px}
+  .power-source-toggle{padding:0 8px;font-size:11px;gap:6px}
+  .remote-lock-button{padding:0 8px;font-size:11px;gap:5px}
   .alert-sound-button,.notification-button{width:36px;min-width:36px}
   .alert-sound-button svg,.notification-button svg{width:18px;height:18px}
-  .install-app-button{padding:0 9px;font-size:11px;gap:5px}
-  .connection-clock{padding:0 9px;gap:7px}
+  .install-app-button{padding:0 8px;font-size:11px;gap:5px}
+  .connection-clock{padding:0 8px;gap:7px}
   .clock strong{font-size:11px}
   .clock small{display:none}
-  .header-tools{gap:6px;max-width:min(72vw,340px)}
+
   .sensors{grid-template-columns:1fr}
   .config-grid{grid-template-columns:1fr}
   .level-card{padding:16px}
@@ -1919,9 +1975,11 @@ dialog::backdrop{
   }
 }
 @media(max-width:380px){
-  .nav{height:52px;min-height:52px;padding:0 10px;gap:6px}
-  .logo{width:34px;height:34px}
+  .logo{width:32px;height:32px}
   .brand strong{font-size:13px}
+  .brand small{font-size:8px}
+  .header-layer-tools{padding:4px 8px}
+  .header-tools{gap:5px}
   .power-source-toggle,
   .remote-lock-button,
   .alert-sound-button,
@@ -1932,17 +1990,16 @@ dialog::backdrop{
     min-height:34px;
     max-height:34px;
   }
-  .power-source-toggle{padding:0 7px;font-size:10.5px;gap:5px}
+  .power-source-toggle{padding:0 6px;font-size:10px;gap:4px}
   .power-switch-track{width:26px;height:15px}
   .power-switch-track::after{width:11px;height:11px}
   .power-source-toggle[aria-pressed="true"] .power-switch-track::after{transform:translateX(11px)}
-  .remote-lock-button{padding:0 7px;font-size:10.5px;gap:4px}
+  .remote-lock-button{padding:0 6px;font-size:10px;gap:4px}
   .alert-sound-button,.notification-button{width:34px;min-width:34px}
   .alert-sound-button svg,.notification-button svg{width:16px;height:16px}
-  .install-app-button{padding:0 7px;font-size:10px;gap:4px}
-  .connection-clock{padding:0 7px;gap:6px}
+  .install-app-button{padding:0 6px;font-size:10px;gap:4px}
+  .connection-clock{padding:0 6px;gap:5px}
   .clock strong{font-size:10px}
-  .header-tools{gap:5px;max-width:min(68vw,260px)}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -1977,6 +2034,7 @@ html[data-theme="dark"]{
   --shadow-card:0 4px 14px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.35);
   --shadow-elevated:0 14px 34px rgba(0,0,0,.7),0 4px 10px rgba(0,0,0,.45);
 }
+html[data-theme="dark"] .header-layer-tools{background:rgba(18,18,18,.8);border-bottom-color:rgba(255,255,255,.04)}
 html[data-theme="dark"] body,
 html[data-theme="dark"] .app-shell{background:#000;color:var(--ink-primary)}
 html[data-theme="dark"] .sidebar,
@@ -2115,42 +2173,55 @@ html[data-theme="dark"] .theme-toggle{background:#111;color:#f5f5f5}
 <!-- Main Header -->
 <header>
   <div class="nav">
-    <div class="brand">
-      <div class="logo">
-        <img src="/secure-logo.png" alt="S.E.C.U.R.E telemetry logo">
+    <!-- Layer 1: Application Identity & System Telemetry -->
+    <div class="header-layer-brand">
+      <div class="brand">
+        <div class="logo">
+          <img src="/secure-logo.png" alt="S.E.C.U.R.E telemetry logo">
+        </div>
+        <div class="brand-copy">
+          <div class="brand-title-row">
+            <strong>S.E.C.U.R.E APPLICATION</strong>
+            <span class="brand-badge">IoT Telemetry</span>
+          </div>
+          <small>WATER LEVEL MONITORING &amp; EARLY WARNING</small>
+        </div>
       </div>
-      <div class="brand-copy">
-        <strong>S.E.C.U.R.E APPLICATION <span class="brand-badge">IoT Telemetry</span></strong>
-        <small>WATER LEVEL MONITORING &amp; EARLY WARNING</small>
+      <div class="header-status-badge" aria-label="System status: Live telemetry">
+        <span class="status-beacon" aria-hidden="true"></span>
+        <span class="status-beacon-text">LIVE TELEMETRY</span>
       </div>
     </div>
-    <div class="header-tools">
-      <button class="power-source-toggle" id="powerSourceToggle" type="button" aria-label="Power Source is off" aria-pressed="false" disabled>
-        <span>Power Source</span>
-        <span class="power-switch-track" aria-hidden="true"></span>
-        <span id="powerToggleState">Off</span>
-      </button>
-      <span class="sr-only" id="powerToggleMessage" role="status" aria-live="polite"></span>
-      <button class="alert-sound-button" id="alertSoundButton" type="button" aria-label="Turn on alert sound" aria-pressed="false" title="Turn on alert sound">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
-          <path class="sound-waves" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>
-          <path class="sound-muted" d="m16 9 5 6m0-6-5 6"/>
-        </svg>
-      </button>
-      <span class="sr-only" id="alertSoundStatus" role="status" aria-live="polite">Sound is off. Tap the sound button to enable alert sounds.</span>
-      <button class="notification-button" id="notificationButton" type="button" aria-label="Alerts: 0" title="Show alerts">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
-          <path d="M10 21h4"/>
-        </svg>
-        <span class="notification-count" id="notificationCount" hidden>0</span>
-      </button>
-      <div class="connection-clock" role="status" aria-label="Connection status and local date and time">
-        <span class="dot" id="linkDot" aria-label="Connecting"></span>
-        <div class="clock" aria-label="Local date and time">
-          <strong id="clockTime">--:-- --</strong>
-          <small id="clockDate">Loading date...</small>
+    <!-- Layer 2: Action Icons & Telemetry Controls -->
+    <div class="header-layer-tools">
+      <div class="header-tools">
+        <button class="power-source-toggle" id="powerSourceToggle" type="button" aria-label="Power Source is off" aria-pressed="false" disabled>
+          <span>Power Source</span>
+          <span class="power-switch-track" aria-hidden="true"></span>
+          <span id="powerToggleState">Off</span>
+        </button>
+        <span class="sr-only" id="powerToggleMessage" role="status" aria-live="polite"></span>
+        <button class="alert-sound-button" id="alertSoundButton" type="button" aria-label="Turn on alert sound" aria-pressed="false" title="Turn on alert sound">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 5 6 9H3v6h3l5 4V5Z"/>
+            <path class="sound-waves" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>
+            <path class="sound-muted" d="m16 9 5 6m0-6-5 6"/>
+          </svg>
+        </button>
+        <span class="sr-only" id="alertSoundStatus" role="status" aria-live="polite">Sound is off. Tap the sound button to enable alert sounds.</span>
+        <button class="notification-button" id="notificationButton" type="button" aria-label="Alerts: 0" title="Show alerts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
+            <path d="M10 21h4"/>
+          </svg>
+          <span class="notification-count" id="notificationCount" hidden>0</span>
+        </button>
+        <div class="connection-clock" role="status" aria-label="Connection status and local date and time">
+          <span class="dot" id="linkDot" aria-label="Connecting"></span>
+          <div class="clock" aria-label="Local date and time">
+            <strong id="clockTime">--:-- --</strong>
+            <small id="clockDate">Loading date...</small>
+          </div>
         </div>
       </div>
     </div>
