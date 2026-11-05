@@ -23,6 +23,8 @@ one-second polling if the Realtime connection is unavailable. The ESP32 sends
 readings from a background network
 task, so slow cloud requests do not block sensor sampling or the local
 dashboard; when a request is delayed, only the newest pending reading is kept.
+Use **Settings → Appearance** to switch the dashboard to its black dark mode;
+the preference is saved in that browser and does not change device settings.
 The dashboard can remotely switch the low-voltage GPIO23 indicator when the
 ESP32 is online. The buzzer repeats a 0.5-second beep with a 0.5-second pause
 in WARNING, and a 0.2-second beep with a 0.2-second pause in CRITICAL; it stops

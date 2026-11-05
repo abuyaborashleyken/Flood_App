@@ -1090,6 +1090,64 @@ dialog::backdrop{background:rgba(11,19,41,.6);backdrop-filter:blur(6px)}
   html{scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg-app:#000;--bg-card:#0b0b0b;--border-subtle:#262626;--border-card:#262626;
+  --ink-primary:#f5f5f5;--ink-secondary:#d4d4d4;--ink-muted:#a3a3a3;--ink-light:#737373;
+  --navy-dark:#000;--navy-surface:#101010;--navy-card:#151515;--navy-border:#292929;
+  --blue-soft:#111827;--safe-surface:#052e23;--safe-text:#a7f3d0;
+  --warn-surface:#332500;--warn-text:#fde68a;--danger-surface:#3b0d0d;--danger-text:#fecaca;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.4);
+  --shadow-card:0 4px 14px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.35);
+  --shadow-elevated:0 14px 34px rgba(0,0,0,.7),0 4px 10px rgba(0,0,0,.45);
+}
+html[data-theme="dark"] body,
+html[data-theme="dark"] .app-shell{background:#000;color:var(--ink-primary)}
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .sensor,
+html[data-theme="dark"] .updated,
+html[data-theme="dark"] .lightbox,
+html[data-theme="dark"] .buzzer-toggle-ui,
+html[data-theme="dark"] .buzzer-toggle-button,
+html[data-theme="dark"] select.driver-select,
+html[data-theme="dark"] .field input,
+html[data-theme="dark"] .power-dialog,
+html[data-theme="dark"] .history-dialog,
+html[data-theme="dark"] .toast{background:#0b0b0b;color:var(--ink-primary);border-color:var(--border-subtle)}
+html[data-theme="dark"] .side-link:hover,
+html[data-theme="dark"] .history-item:not(:disabled):hover,
+html[data-theme="dark"] .history-close:hover{background:#171717;color:var(--ink-primary)}
+html[data-theme="dark"] .sidebar-note,
+html[data-theme="dark"] .charthead span,
+html[data-theme="dark"] canvas,
+html[data-theme="dark"] .buzzer-toggle-button[aria-pressed="true"]{background:#111}
+html[data-theme="dark"] .status-card{background:linear-gradient(145deg,#000 0%,#080808 55%,#111 100%);border-color:#292929}
+html[data-theme="dark"] .level-card[data-level-status="warning"]{--level-soft:#332500}
+html[data-theme="dark"] .level-card[data-level-status="critical"]{--level-soft:#3b0d0d}
+html[data-theme="dark"] .level-card[data-level-status="fault"],
+html[data-theme="dark"] .level-card[data-level-status="offline"]{--level-soft:#171717}
+html[data-theme="dark"] .house-illustration{background:#050505}
+html[data-theme="dark"] .house-illustration svg>path:first-of-type{fill:#080808;stroke:#525252}
+html[data-theme="dark"] .house-illustration svg>path:last-child{stroke:#a3a3a3}
+html[data-theme="dark"] .house-reading strong{color:#f5f5f5;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+html[data-theme="dark"] .preview{background:#332500;color:#fde68a;border-color:#5c4500}
+.appearance-card{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:24px}
+.appearance-copy h2{margin:0;color:var(--ink-primary);font-size:16px;font-weight:800}
+.appearance-copy p{margin:4px 0 0;color:var(--ink-muted);font-size:12px}
+.appearance-control{display:flex;align-items:center;gap:14px}
+.appearance-control>span{color:var(--ink-secondary);font-size:13px;font-weight:700}
+.theme-toggle{
+  display:inline-flex;align-items:center;gap:9px;min-width:82px;min-height:38px;padding:6px 10px;
+  border:1px solid var(--border-subtle);border-radius:var(--radius-md);
+  background:var(--bg-app);color:var(--ink-secondary);font-size:12px;font-weight:750;
+}
+.theme-toggle:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+.theme-toggle-track{position:relative;width:32px;height:18px;flex:none;border-radius:18px;background:#94a3b8;transition:background .2s ease}
+.theme-toggle-track:after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s ease}
+.theme-toggle[aria-pressed="true"] .theme-toggle-track{background:#2563eb}
+.theme-toggle[aria-pressed="true"] .theme-toggle-track:after{transform:translateX(14px)}
+html[data-theme="dark"] .theme-toggle{background:#111;color:#f5f5f5}
+@media(max-width:480px){.appearance-card{align-items:flex-start;flex-direction:column;gap:14px}}
 </style>
 </head>
 <body>
@@ -1344,6 +1402,20 @@ dialog::backdrop{background:rgba(11,19,41,.6);backdrop-filter:blur(6px)}
         </div>
       </div>
 
+      <section class="card appearance-card" aria-labelledby="appearanceTitle">
+        <div class="appearance-copy">
+          <h2 id="appearanceTitle">Appearance</h2>
+          <p>Choose how this dashboard looks on this browser.</p>
+        </div>
+        <div class="appearance-control">
+          <span id="themeToggleLabel">Dark mode (black)</span>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-labelledby="themeToggleLabel themeToggleState" aria-pressed="false">
+            <span class="theme-toggle-track" aria-hidden="true"></span>
+            <span id="themeToggleState">Off</span>
+          </button>
+        </div>
+      </section>
+
       <div class="cal-head">
         <div>
           <h2>Threshold Rules Matrix</h2>
@@ -1388,6 +1460,24 @@ dialog::backdrop{background:rgba(11,19,41,.6);backdrop-filter:blur(6px)}
 </footer>
 <script>
 const el=id=>document.getElementById(id);
+const dashboardThemeKey='secure-dashboard-theme';
+function applyDashboardTheme(dark,persist=false){
+ document.documentElement.dataset.theme=dark?'dark':'light';
+ el('themeToggle').setAttribute('aria-pressed',String(dark));
+ el('themeToggleState').textContent=dark?'On':'Off';
+ if(persist){
+  try{localStorage.setItem(dashboardThemeKey,dark?'dark':'light')}
+  catch(error){console.warn('Could not save dashboard appearance preference.',error)}
+ }
+ const themeColor=document.querySelector('meta[name="theme-color"]');
+ if(themeColor)themeColor.content=dark?'#000000':'#0b1329';
+ if(persist&&typeof draw==='function')draw();
+}
+let savedDashboardTheme='light';
+try{savedDashboardTheme=localStorage.getItem(dashboardThemeKey)==='dark'?'dark':'light'}
+catch(error){console.warn('Could not load dashboard appearance preference.',error)}
+applyDashboardTheme(savedDashboardTheme==='dark');
+el('themeToggle').addEventListener('click',()=>applyDashboardTheme(el('themeToggle').getAttribute('aria-pressed')!=='true',true));
 const buzzerPanel=document.querySelector('.test-panel');
 buzzerPanel.querySelector('.field').hidden=true;
 buzzerPanel.querySelector('#applyBuzzerModeBtn').hidden=true;
