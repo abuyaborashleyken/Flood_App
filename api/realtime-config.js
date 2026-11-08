@@ -1,4 +1,7 @@
+import { applyCors } from "../lib/cors.js";
+
 export default function handler(req, res) {
+  if (!applyCors(req, res)) return;
   res.setHeader("Cache-Control", "no-store");
 
   if (req.method !== "GET") {

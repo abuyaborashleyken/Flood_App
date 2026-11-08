@@ -57,6 +57,27 @@ Supabase service-role key are managed as Vercel environment variables, not in
 this repository. A Supabase publishable/anon key is exposed only for the
 read-only Realtime WebSocket client; it is not a service-role key.
 
+### Host the dashboard on InfinityFree
+
+InfinityFree hosts the static dashboard files; the Node.js API and Supabase
+backend remain on Vercel. Create an InfinityFree site with HTTPS enabled, then
+upload the **contents** of this repository's `public/` folder into the site's
+`htdocs/` directory. Do not upload `.env` files, device secrets, or the Vercel
+`api/` and `lib/` folders.
+
+In the Vercel project's Production environment, set
+`AQUAGUARD_APP_ORIGIN` to the exact HTTPS origin of the InfinityFree site, with
+no trailing slash (for example, `https://your-site.infinityfreeapp.com`), then
+redeploy. The static dashboard calls the existing
+`https://secure-app-live.vercel.app` API, and Vercel accepts browser requests
+only from that configured origin. If you use a custom domain or change the
+Vercel API domain, update the API URL in `public/index.html` accordingly.
+
+Remote-control sign-in uses a secure cross-site cookie in this split-host
+setup. Some browsers block third-party cookies, which can prevent remote
+controls from staying signed in; using a custom domain arrangement that keeps
+the dashboard and API on the same site is more reliable.
+
 ### Configure the Supabase telemetry backend
 
 1. Create a Supabase project and open its **SQL Editor**.

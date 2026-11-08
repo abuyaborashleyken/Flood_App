@@ -2568,6 +2568,8 @@ buzzerToggleUi.innerHTML='<div class="buzzer-toggle-ui"><div class="buzzer-toggl
 buzzerPanel.prepend(buzzerToggleUi);
 const preview=location.protocol==='file:';
 const cloudDashboard=location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1';
+const cloudApiBase=location.hostname==='localhost'||location.hostname==='127.0.0.1'||location.hostname.endsWith('.vercel.app')?'':'https://secure-app-live.vercel.app';
+function cloudApi(path){return cloudApiBase+path}
 let alertAudioContext=null,alertSoundEnabled=false;
 el('menuToggle').addEventListener('click',()=>{
  const collapsed=el('appShell').classList.toggle('sidebar-collapsed');
@@ -2751,7 +2753,7 @@ async function sendLedCommand(action){
  const m=el('powerToggleMessage');m.textContent=action==='on'?'Turning the power source on...':'Turning the power source off...';
  try{
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),4000);
-  let response;try{response=await fetch(cloudDashboard?'/api/control':'/api/led',{method:'POST',headers:cloudDashboard?{'Content-Type':'application/json'}:{},body:cloudDashboard?JSON.stringify({action}):new URLSearchParams({action}),cache:'no-store',signal:controller.signal});}finally{clearTimeout(timeout);}
+  let response;try{response=await fetch(cloudDashboard?cloudApi('/api/control'):'/api/led',{method:'POST',headers:cloudDashboard?{'Content-Type':'application/json'}:{},body:cloudDashboard?JSON.stringify({action}):new URLSearchParams({action}),cache:'no-store',credentials:'include',signal:controller.signal});}finally{clearTimeout(timeout);}
   const result=await response.json();
   if(response.status===401&&cloudDashboard){remoteControlAuthenticated=false;openControlLogin(action);return;}
   if(!response.ok||!result.ok)throw Error(result.error||'LED command was rejected');
@@ -2775,7 +2777,7 @@ async function sendBuzzerCommand(action){
  message.textContent=action==='on'?'Turning the buzzer on...':'Turning the buzzer off...';
  try{
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),4000);
-  let response;try{response=await fetch(cloudDashboard?'/api/control':'/api/buzzer/enabled',{method:'POST',headers:cloudDashboard?{'Content-Type':'application/json'}:{},body:cloudDashboard?JSON.stringify({action,target:'buzzer'}):new URLSearchParams({enabled:action}),cache:'no-store',signal:controller.signal});}finally{clearTimeout(timeout);}
+  let response;try{response=await fetch(cloudDashboard?cloudApi('/api/control'):'/api/buzzer/enabled',{method:'POST',headers:cloudDashboard?{'Content-Type':'application/json'}:{},body:cloudDashboard?JSON.stringify({action,target:'buzzer'}):new URLSearchParams({enabled:action}),cache:'no-store',credentials:'include',signal:controller.signal});}finally{clearTimeout(timeout);}
   const result=await response.json();
   if(response.status===401&&cloudDashboard){remoteControlAuthenticated=false;openControlLogin('buzzer:'+action);return;}
   if(!response.ok||!result.ok)throw Error(result.error||'Buzzer command was rejected');
@@ -2805,12 +2807,12 @@ async function saveChangeAlertSetting(){
  if(cloudDashboard&&!remoteControlAuthenticated){openControlLogin('setting:change-alert');return;}
  button.disabled=true;message.className='message';message.textContent='Saving setting to the ESP32...';
  try{
-  const response=await fetch(cloudDashboard?'/api/control':'/api/config',{
+  const response=await fetch(cloudDashboard?cloudApi('/api/control'):'/api/config',{
    method:'POST',
    headers:cloudDashboard?{'Content-Type':'application/json'}:{},
    body:cloudDashboard?JSON.stringify({action:'set-change-alert',target:'settings',value}):new URLSearchParams({changeCm:String(value)}),
    cache:'no-store',
-   credentials:cloudDashboard?'same-origin':'same-origin',
+   credentials:'include',
   });
   const result=await response.json();
   if(response.status===401&&cloudDashboard){remoteControlAuthenticated=false;openControlLogin('setting:change-alert');return;}
@@ -2854,7 +2856,7 @@ function openControlLogin(action=''){
 }
 async function checkRemoteControlSession(){
  try{
-  const response=await fetch('/api/control-auth',{cache:'no-store',credentials:'same-origin'});
+  const response=await fetch(cloudApi('/api/control-auth'),{cache:'no-store',credentials:'include'});
   const result=await response.json();
   remoteControlConfigured=response.ok&&result.configured===true;
   remoteControlAuthenticated=remoteControlConfigured&&result.authenticated===true;
@@ -2867,7 +2869,7 @@ el('controlLoginForm').addEventListener('submit',async event=>{
  const submit=el('controlLoginForm').querySelector('[type="submit"]');
  submit.disabled=true;el('controlLoginError').textContent='';
  try{
-  const response=await fetch('/api/control-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:el('controlPassword').value}),cache:'no-store',credentials:'same-origin'});
+  const response=await fetch(cloudApi('/api/control-auth'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:el('controlPassword').value}),cache:'no-store',credentials:'include'});
   const result=await response.json();
   if(!response.ok||!result.ok)throw Error(result.error||'Could not unlock remote control.');
   remoteControlAuthenticated=true;remoteLockButton.hidden=false;el('controlPassword').value='';
@@ -2882,7 +2884,7 @@ el('controlLoginForm').addEventListener('submit',async event=>{
 el('controlLoginCancel').addEventListener('click',()=>{pendingLoginAction='';el('controlLoginDialog').close();});
 el('controlLogoutButton').addEventListener('click',async()=>{
  try{
-  const response=await fetch('/api/control-auth',{method:'DELETE',cache:'no-store',credentials:'same-origin'});
+  const response=await fetch(cloudApi('/api/control-auth'),{method:'DELETE',cache:'no-store',credentials:'include'});
   if(!response.ok)throw Error('Could not lock remote control.');
   remoteControlAuthenticated=false;remoteLockButton.hidden=true;pendingLoginAction='';el('controlLoginDialog').close();
   el('powerToggleMessage').textContent='Remote control locked.';
@@ -3094,11 +3096,11 @@ const offlineWithBuzzerToggle=offline;
 offline=function(){offlineWithBuzzerToggle();el('buzzerToggleBtn').disabled=true;};
 function simulated(){previewTick++;const cm=Math.max(2,Math.min(15,8.5+Math.sin(previewTick/6)*6));const state=cm<7?'critical':cm<11?'warning':'safe';if(state==='safe')previewLedOn=true;const p=Math.max(0,Math.min(100,(15-cm)*100/15));return {status:state,ledOn:previewLedOn,ultrasonicOk:true,levelPercent:p,distanceCm:cm,waterHeightCm:15-cm,green:state==='safe',yellow:state==='warning',red:state==='critical',buzzer:state==='warning'||state==='critical',buzzerEnabled:true,buzzerMode:'Active HIGH',buzzerType:'active',changeAlertCm:1,lastAlertDeltaCm:2.1,lastAlertDistanceCm:cm,lastAlertDirection:'Rising water',lastAlertAgeSec:2,distanceChangeAlertCount:4,buzzerTest:false,clients:1,uptime:previewTick};}
 function hasRecentCloudTelemetry(){const age=Date.now()-lastTelemetryReceivedAt;return lastTelemetryReceivedAt>0&&age>=-30000&&age<90000}
-async function load(){if(polling||(cloudDashboard&&realtimeConnected&&Date.now()-lastStatusCheckAt<10000))return;polling=true;lastStatusCheckAt=Date.now();const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),3000);try{if(preview){render(simulated());return}const r=await fetch('/api/status?ts='+Date.now(),{cache:'no-store',signal:ctrl.signal});if(!r.ok)throw Error('Status request failed');const d=await r.json();if(!d.ok)throw Error('Invalid sensor response');if(cloudDashboard&&!d.available){if(!hasRecentCloudTelemetry())offline();return}render(d)}catch(e){if(!cloudDashboard||!hasRecentCloudTelemetry())offline()}finally{clearTimeout(timer);polling=false}}
+async function load(){if(polling||(cloudDashboard&&realtimeConnected&&Date.now()-lastStatusCheckAt<10000))return;polling=true;lastStatusCheckAt=Date.now();const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),3000);try{if(preview){render(simulated());return}const r=await fetch(cloudApi('/api/status?ts='+Date.now()),{cache:'no-store',credentials:'include',signal:ctrl.signal});if(!r.ok)throw Error('Status request failed');const d=await r.json();if(!d.ok)throw Error('Invalid sensor response');if(cloudDashboard&&!d.available){if(!hasRecentCloudTelemetry())offline();return}render(d)}catch(e){if(!cloudDashboard||!hasRecentCloudTelemetry())offline()}finally{clearTimeout(timer);polling=false}}
 async function startRealtime(){
  if(!cloudDashboard)return;
  try{
-  const response=await fetch('/api/realtime-config',{cache:'no-store'});
+  const response=await fetch(cloudApi('/api/realtime-config'),{cache:'no-store',credentials:'include'});
   if(!response.ok)throw Error('Realtime configuration request failed');
   const config=await response.json();
   if(!config.ok)throw Error('Invalid realtime configuration');

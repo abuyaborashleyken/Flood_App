@@ -4,8 +4,10 @@ import {
   isAuthorizedControlCookie,
   isSameOriginRequest,
 } from "../lib/control-auth.js";
+import { applyCors } from "../lib/cors.js";
 
 export default async function handler(req, res) {
+  if (!applyCors(req, res)) return;
   res.setHeader("Cache-Control", "no-store");
 
   if (req.method !== "POST") {

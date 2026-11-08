@@ -7,10 +7,12 @@ import {
   isValidControlPassword,
   MIN_CONTROL_PASSWORD_LENGTH,
 } from "../lib/control-auth.js";
+import { applyCors } from "../lib/cors.js";
 
 export default function handler(req, res) {
+  if (!applyCors(req, res)) return;
   res.setHeader("Cache-Control", "no-store");
-  res.setHeader("Vary", "Cookie");
+  res.setHeader("Vary", "Origin, Cookie");
 
   const controlPassword = process.env.AQUAGUARD_CONTROL_PASSWORD;
   if (req.method === "GET") {
@@ -25,9 +27,12 @@ export default function handler(req, res) {
   }
 
   if (req.method === "DELETE") {
+    if (!isSameOriginRequest(req)) {
+      return res.status(403).json({ ok: false, error: "Request origin rejected." });
+    }
     res.setHeader(
       "Set-Cookie",
-      `${CONTROL_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age=0`,
+      `${CONTROL_COOKIE_NAME}=; HttpOnly; Secure; SameSite=None; Path=/api; Max-Age=0`,
     );
     return res.status(200).json({ ok: true });
   }
@@ -56,7 +61,7 @@ export default function handler(req, res) {
   const session = createControlSession(controlPassword);
   res.setHeader(
     "Set-Cookie",
-    `${CONTROL_COOKIE_NAME}=${session.value}; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age=${CONTROL_SESSION_MAX_AGE_SECONDS}`,
+    `${CONTROL_COOKIE_NAME}=${session.value}; HttpOnly; Secure; SameSite=None; Path=/api; Max-Age=${CONTROL_SESSION_MAX_AGE_SECONDS}`,
   );
   return res.status(200).json({ ok: true, authenticated: true });
 }
