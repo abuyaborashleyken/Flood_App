@@ -17,6 +17,7 @@
 #include <freertos/task.h>
 #include <esp_arduino_version.h>
 #include <stdlib.h>
+#include <time.h>
 
 #if __has_include("secrets.h")
 #include "secrets.h"
@@ -2290,6 +2291,25 @@ String cloudJsonStringField(const String &json, const char *field, int startAt =
   return json.substring(contentStart, valueEnd);
 }
 
+bool cloudClockIsSynchronized() {
+  constexpr time_t MINIMUM_VALID_UNIX_TIME = 1735689600;
+  static bool synchronizationRequested = false;
+
+  if (time(nullptr) >= MINIMUM_VALID_UNIX_TIME) return true;
+  if (!synchronizationRequested) {
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    synchronizationRequested = true;
+    Serial.println("Synchronizing system clock before HTTPS telemetry");
+  }
+
+  const uint32_t startedAt = millis();
+  while (time(nullptr) < MINIMUM_VALID_UNIX_TIME &&
+         millis() - startedAt < 10000UL) {
+    vTaskDelay(pdMS_TO_TICKS(250));
+  }
+  return time(nullptr) >= MINIMUM_VALID_UNIX_TIME;
+}
+
 bool cloudJsonFloatField(const String &json, const char *field, float &value, int startAt = 0) {
   const String marker = String("\"") + field + "\":";
   const int valueStart = json.indexOf(marker, startAt);
@@ -2395,6 +2415,11 @@ bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
       continue;
     }
 
+    if (!cloudClockIsSynchronized()) {
+      Serial.println("ERROR: System clock is not synchronized; HTTPS telemetry skipped");
+      continue;
+    }
+
     Serial.printf("Cloud telemetry Wi-Fi connected: IP %s, signal %d dBm\n",
                   WiFi.localIP().toString().c_str(), WiFi.RSSI());
 
@@ -2406,14 +2431,21 @@ bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c
       continue;
     }
 
-    http.setConnectTimeout(2500);
-    http.setTimeout(2500);
+    http.setConnectTimeout(10000);
+    http.setTimeout(10000);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", String("Bearer ") + AQUAGUARD_DEVICE_TOKEN);
     const int responseCode = http.POST(request.json);
     if (responseCode < 200 || responseCode >= 300) {
-      Serial.printf("ERROR: Cloud telemetry request returned HTTP %d\n", responseCode);
+      const String responseBody = http.getString();
+      Serial.printf("ERROR: Cloud telemetry request returned HTTP %d: %s\n",
+                    responseCode, responseBody.c_str());
     } else {
+      static uint32_t lastSuccessLogMs = 0;
+      if (lastSuccessLogMs == 0 || millis() - lastSuccessLogMs >= 30000UL) {
+        Serial.printf("Cloud telemetry accepted (HTTP %d)\n", responseCode);
+        lastSuccessLogMs = millis();
+      }
       const String responseBody = http.getString();
       if (responseBody.indexOf("\"command\":{") >= 0) {
         CloudCommandResponse commandResponse;

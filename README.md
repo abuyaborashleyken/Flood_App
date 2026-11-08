@@ -15,6 +15,11 @@ https://secure-app-live.vercel.app
    ESP32 board support if needed, select the connected ESP32 board and port,
    then upload the sketch.
 
+The sketch synchronizes the ESP32 clock over NTP before validating the Vercel
+HTTPS certificate. After uploading, open the Arduino Serial Monitor at 115200
+baud to confirm router Wi-Fi and successful cloud requests; HTTP errors are
+reported there. The router must provide internet access and allow NTP traffic.
+
 The ESP32 continues to broadcast its local `S.E.C.U.R.E` network while joining
 the router network. The Vercel dashboard uses the same design as the local
 device dashboard. Cloud readings are sent about once a second and are pushed
